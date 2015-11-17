@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<package uuid="naospyserver">
+ <names>
+  <name lang="en_US">NAOSpyServer</name>
+ </names>
+ <descriptionLanguages>
+  <language>en_US</language>
+ </descriptionLanguages>
+ <contents>
+  <behaviorContent path="NAOSpyServer">
+   <nature></nature>
+   <permissions/>
+  </behaviorContent>
+ </contents>
+</package>

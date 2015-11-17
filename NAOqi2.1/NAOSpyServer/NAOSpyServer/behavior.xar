@@ -1,0 +1,460 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ChoregrapheProject xmlns="http://www.aldebaran-robotics.com/schema/choregraphe/project.xsd" xar_version="3">
+    <Box name="root" id="-1" localization="8" tooltip="Root box of Choregraphe&apos;s project. Highest level possible." x="0" y="0">
+        <bitmap>media/images/box/root.png</bitmap>
+        <script language="4">
+            <content>
+                <![CDATA[]]>
+</content>
+        </script>
+        <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+        <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+        <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+        <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="指令盒行为结束时，送出信号。" id="4" />
+        <Timeline enable="0">
+            <BehaviorLayer name="behavior_layer1">
+                <BehaviorKeyframe name="keyframe1" index="1">
+                    <Diagram>
+                        <Box name="NAOSpyServer" id="1" localization="8" tooltip="version 1.0&#x0A;by shiqishan" x="119" y="84">
+                            <bitmap>media/images/box/box-diagram.png</bitmap>
+                            <script language="4">
+                                <content>
+                                    <![CDATA[]]>
+</content>
+                            </script>
+                            <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                            <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+                            <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+                            <Timeline enable="1" fps="25" start_frame="1" end_frame="-1" size="-1">
+                                <BehaviorLayer name="visionServer">
+                                    <BehaviorKeyframe name="visionServer" index="1">
+                                        <Diagram>
+                                            <Box name="visionServer" id="1" localization="8" tooltip="visionServer by shiqishan" x="114" y="57">
+                                                <bitmap>media/images/box/box-diagram.png</bitmap>
+                                                <script language="4">
+                                                    <content>
+                                                        <![CDATA[import socket
+import struct
+import time
+import vision_definitions
+import base64
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+        self.memory = ALProxy("ALMemory")
+        self.motion = ALProxy("ALMotion")
+        self.postureProxy = ALProxy("ALRobotPosture")
+        self.videoProxy= ALProxy("ALVideoDevice")
+        self.threadtime = 0.2
+    def onLoad(self):
+        self.bstart = True
+        self.baccept = True
+        self.isSubscribed = False
+        self.stifness_tem = 3
+    def onUnload(self):
+        self.bstart = False
+        self.baccept = False
+        self.isSubscribed = False
+    def onInput_onStart(self):
+        self.startSocket()
+        self.videoProxy.setParam(vision_definitions.kCameraSelectID,0)
+        subscriberID = self.videoProxy.subscribe("shiqishan", 0, 11, 15);
+        self.threadtime = self.getParameter("threadtime")
+        while(self.bstart):
+            cliSock,(self.addr, self.port) = self.sock.accept()
+            self.baccept = True
+            self.logger.info("connect from...%s",self.addr)
+            while(self.baccept):
+                try:
+                    msg = cliSock.recv( 500 )
+                    if msg.startswith("NVImageRequest",0,16):
+                        imageArr = self.videoProxy.getImageRemote(subscriberID)
+                        image = imageArr[6]
+                        cliSock.sendall(image)
+                    elif msg.startswith("NVImageClose",0,16):
+                        self.logger.info("22222222222222")
+                        cliSock.close()
+                        break
+                    elif msg.startswith("CameraMsg",0,16):
+                        self.logger.info("44444444...%s",msg)
+                        msg = msg[0:11]
+                        index = int(msg[-2])
+                        resolution = int(msg[-1])
+                        self.logger.info("index....%d",index)
+                        self.logger.info("resolution....%d",resolution)
+                        self.videoProxy.setParam(vision_definitions.kCameraSelectID,index)
+                        self.videoProxy.setResolution(subscriberID, resolution)
+                        time.sleep(0.3)
+                        res = self.videoProxy.getResolution(subscriberID)
+                        string = "CameraBack"+str(res)
+                        cliSock.send(string)
+                    elif msg.startswith("SpeechMsg",0,16):
+                        header,info = struct.unpack("!16s460s",msg)
+                        content = self.getString(info)
+                        self.outputText(content)
+                except:
+                    self.logger.info("3333333333333")
+                    cliSock.close()
+                    break
+
+
+    def onInput_onStop(self):
+        self.onUnload()
+        self.sock.close()
+        self.videoProxy.unsubscribe(self.subscriberID)
+    def startSocket(self):
+        self.sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+        port = 47303
+        while True:
+            try:
+                self.sock.bind( ('',port))
+                self.memory.insertData("SPYTCPPORT",port)
+                self.startUDP()
+                self.logger.info("port...%d",port)
+                break
+            except:
+                self.logger.info("...%d...failed",port)
+                port += 1
+        self.sock.listen(5)
+    def getString(self,p):
+        string = []
+        string = p.split('*|')
+        if len(string)>0:
+            return string[0]
+        else:
+            return ""]]>
+</content>
+                                                </script>
+                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                                                <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+                                                <Output name="outputText" type="3" type_size="1" nature="2" inner="0" tooltip="" id="4" />
+                                                <Output name="startUDP" type="1" type_size="1" nature="2" inner="0" tooltip="" id="5" />
+                                                <Parameter name="threadtime" inherits_from_parent="1" content_type="2" value="0.02" default_value="0.2" min="0" max="1" tooltip="" id="6" />
+                                            </Box>
+                                            <Box name="Say Text" id="2" localization="8" tooltip="Say the text received on its input." x="423" y="85">
+                                                <bitmap>media/images/box/interaction/say.png</bitmap>
+                                                <script language="4">
+                                                    <content>
+                                                        <![CDATA[import time
+
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self, False)
+        self.tts = ALProxy('ALTextToSpeech')
+        self.ttsStop = ALProxy('ALTextToSpeech', True) #Create another proxy as wait is blocking if audioout is remote
+
+    def onLoad(self):
+        self.bIsRunning = False
+        self.ids = []
+
+    def onUnload(self):
+        for id in self.ids:
+            try:
+                self.ttsStop.stop(id)
+            except:
+                pass
+        while( self.bIsRunning ):
+            time.sleep( 0.2 )
+
+    def onInput_onStart(self, p):
+        self.bIsRunning = True
+        try:
+            sentence = "\RSPD="+ str( self.getParameter("Speed (%)") ) + "\ "
+            sentence += "\VCT="+ str( self.getParameter("Voice shaping (%)") ) + "\ "
+            sentence += str(p)
+            sentence +=  "\RST\ "
+            id = self.tts.post.say(str(sentence))
+            self.ids.append(id)
+            self.tts.wait(id, 0)
+        finally:
+            try:
+                self.ids.remove(id)
+            except:
+                pass
+            if( self.ids == [] ):
+                self.onStopped() # activate output of the box
+                self.bIsRunning = False
+
+    def onInput_onStop(self):
+        self.onUnload()]]>
+</content>
+                                                </script>
+                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when Diagram is loaded." id="1" />
+                                                <Input name="onStart" type="3" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this Input." id="2" />
+                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this Input." id="3" />
+                                                <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when Box behavior is finished." id="4" />
+                                                <Parameter name="Voice shaping (%)" inherits_from_parent="1" content_type="1" value="100" default_value="100" min="50" max="150" tooltip='Used to modify at runtime the voice feature (tone, speed). In a slighty&#x0A;different way than pitch and speed, it gives a kind of &quot;gender or age&#x0A;modification&quot; effect.&#x0A;&#x0A;For instance, a quite good male derivation of female voice can be&#x0A;obtained setting this parameter to 78%.&#x0A;&#x0A;Note: For a better effect, you can compensate this parameter with the&#x0A;speed parameter. For example, if you want to decrease by 20% the voice&#x0A;shaping, you will have to increase by 20% the speed to keep a constant&#x0A;average speed.' id="5" />
+                                                <Parameter name="Speed (%)" inherits_from_parent="1" content_type="1" value="100" default_value="100" min="50" max="200" tooltip="Changes the speed of the voice.&#x0A;&#x0A;Note: For a better effect, you can compensate this parameter with the voice&#x0A;shaping parameter. For example, if you want to increase by 20% the speed, you&#x0A;will have to decrease by 20% the voice shaping to keep a constant average&#x0A;speed." id="6" />
+                                            </Box>
+                                            <Box name="Stop" id="3" localization="8" tooltip="Stop the parent timeline at the current frame index.&#x0A;&#x0A;!!Warning!! This box does not stop the behavior! It is only the timeline which will&#x0A;stop playing, the keyframes and boxes will still be running." x="611" y="18">
+                                                <bitmap>media/images/box/box-timeLine.png</bitmap>
+                                                <script language="4">
+                                                    <content>
+                                                        <![CDATA[class MyClass(GeneratedClass):
+    def __init__(self):
+        try: # disable autoBind
+          GeneratedClass.__init__(self, False)
+        except TypeError: # if NAOqi < 1.14
+          GeneratedClass.__init__( self )
+
+    def onInput_onStop(self):
+        self.stopTimelineParent()]]>
+</content>
+                                                </script>
+                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                                                <Input name="onStop" type="1" type_size="1" nature="1" inner="0" tooltip="Parent timeline stops when a signal is received on this input." id="2" />
+                                            </Box>
+                                            <Box name="GotoAction" id="5" localization="8" tooltip="Enter tooltip here" x="427" y="206">
+                                                <bitmap>media/images/box/box-diagram.png</bitmap>
+                                                <script language="4">
+                                                    <content>
+                                                        <![CDATA[class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+    def onLoad(self):
+        pass
+    def onUnload(self):
+        pass
+    def onInput_onStart(self, p):
+        self.gotoState(10)
+    def onInput_onStop(self):
+        self.onUnload()
+    def gotoState(self,p):
+        try:
+            self.getParentTimeline().goTo(p)
+        except: # if NAOqi < 1.14
+            self.gotoAndStopParent(p)]]>
+</content>
+                                                </script>
+                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                                                <Input name="onStart" type="1" type_size="1" nature="1" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+                                            </Box>
+                                            <Link inputowner="2" indexofinput="2" outputowner="1" indexofoutput="4" />
+                                            <Link inputowner="1" indexofinput="2" outputowner="0" indexofoutput="1" />
+                                            <Link inputowner="3" indexofinput="2" outputowner="0" indexofoutput="1" />
+                                            <Link inputowner="5" indexofinput="2" outputowner="1" indexofoutput="5" />
+                                        </Diagram>
+                                    </BehaviorKeyframe>
+                                </BehaviorLayer>
+                                <BehaviorLayer name="UDP">
+                                    <BehaviorKeyframe name="Online Info" index="10">
+                                        <Diagram>
+                                            <Box name="OnlineInfo" id="4" localization="8" tooltip="by shiqishan" x="177" y="85">
+                                                <bitmap>media/images/box/box-diagram.png</bitmap>
+                                                <script language="4">
+                                                    <content>
+                                                        <![CDATA[import socket
+import struct
+import time
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+        self.motion = ALProxy("ALMotion")
+        self.memory = ALProxy("ALMemory")
+        self.managerProxy = ALProxy("ALBehaviorManager")
+        self.postureProxy = ALProxy("ALRobotPosture")
+        self.tts = ALProxy("ALTextToSpeech")
+        try:
+            self.audio = ALProxy("ALAudioDevice")
+        except :
+            self.audio = ALProxy("ALAudioPlayer")
+    def onLoad(self):
+        self.bstart = True
+        self.config = False
+    def onUnload(self):
+        self.bstart = False
+        self.sock.close()
+    def onInput_onStart(self):
+        self.SendPort = self.getParameter("SendPort")
+        self.RecvPort = self.getParameter("RecvPort")
+        self.threadtime = self.getParameter("threadtime")
+        self.startSocket()
+        while(self.bstart):
+            try:
+                self.msg,(self.addr, self.port) = self.sock.recvfrom( 200 )
+                self.msg_unpack()
+            except :
+                self.logger.info("onlineInfo bug....")
+                pass
+    def onInput_onStop(self):
+        self.onUnload()
+    def startSocket(self):
+        self.desc = ('<broadcast>',self.SendPort)
+        self.sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
+        self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+        self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+        self.sock.bind( ('',self.RecvPort))
+    def msg_unpack(self):
+        if self.msg == "NVOnlineReq":
+            self.sendOnlineMsg()
+            self.logger.info("online send info...")
+        elif (self.msg.startswith('WalkMsg',0,16)):
+            self.logger.info("walk send info...")
+            header,walkX,walkY,theta,frequency = struct.unpack("!16s4i",self.msg)
+            walkX = walkX/167772160.0
+            walkY = walkY/167772160.0
+            theta = theta/167772160.0
+            frequency = frequency/167772160.0
+            self.motion.setWalkTargetVelocity(walkX,walkY,theta,frequency)
+        elif(self.msg.startswith('HeadMsg',0,16)):
+            header,walkX,walkY = struct.unpack("!16s2i",self.msg)
+            walkX = walkX/167772160.0
+            walkY = walkY/167772160.0
+            currentYaw = self.motion.getAngles("HeadYaw",False)
+            currentPitch = self.motion.getAngles("HeadPitch",False)
+            if(walkX>0 and currentPitch[0]<=0.326):
+                self.motion.changeAngles("HeadPitch",walkX,0.2)
+            elif(walkX<=0 and currentPitch[0]>=-0.445):
+                self.motion.changeAngles("HeadPitch",walkX,0.2)
+            if(walkY>0 and currentYaw[0]<=2.07):
+                self.motion.changeAngles("HeadYaw",walkY,0.2)
+            if(walkY<=0 and currentYaw[0]>=-2.07):
+                self.motion.changeAngles("HeadYaw",walkY,0.2)
+        elif self.msg == "SettingsReq":
+            self.sendSettingsMsg()
+        elif self.msg == "BehaviorReq":
+            self.sendBehaviorMsg()
+        elif(self.msg.startswith('SettingsMsg',0,16)):
+            header,info1,info2 = struct.unpack("!16s20s40s",self.msg)
+            self.logger.info("setting msg ...%s",self.msg)
+            body = self.getString(info1)
+            value = self.getString(info2)
+            if(body == "Stiffness"):
+                self.motion.post.stiffnessInterpolation("Body",float(value)/10.0, 0.1)
+            elif(body == "Volume"):
+                try:
+                    audio = ALProxy("ALAudioDevice")
+                    audio.setOutputVolume(int(value))
+                except:
+                    pass
+            elif(body == "Language"):
+                self.tts.setLanguage(value)
+            elif(body == "Posture"):
+                self.postureProxy.setMaxTryNumber(2)
+                result = self.postureProxy.goToPosture(value,0.6)
+        elif(self.msg.startswith('BehaviorMsg',0,16)):
+            header,info1,info2,info3 = struct.unpack("!16s20s20s100s",self.msg)
+            self.logger.info("beha msg ...%s",self.msg)
+            targetIP = self.getString(info1)
+            body = self.getString(info2)
+            behavior = self.getString(info3)
+            if(body == "start"):
+
+                self.managerProxy.post.runBehavior(behavior)
+
+            elif(body == "stop"):
+                if (self.managerProxy.isBehaviorRunning(behavior)):
+                    self.managerProxy.stopBehavior(behavior)
+        else:
+            pass
+
+    def sendOnlineMsg(self):
+        header = "NVOnlineRes"
+        version = "1.0"
+        name = " "
+        isRobotics = 1
+        try:
+            system = ALProxy("ALSystem")
+            name = system.robotName()
+            isRobotics = 1
+        except:
+            isRobotics = 0
+        port = self.memory.getData("SPYTCPPORT")-47300
+        self.logger.info("port2222...%d",port)
+        robotInfo = struct.pack('!15s20s10s2h',header,name,version,isRobotics,port)
+        self.sock.sendto(robotInfo,(self.addr, self.port))
+    def sendSettingsMsg(self):
+        header = "SettingsRes"
+        supportLanguage = ""
+        try:
+            volume = self.audio.getOutputVolume()
+            isRobotics = 1
+        except:
+            volume = 0
+            isRobotics = 0
+        if(isRobotics == 1):
+            try:
+                volume = self.audio.getOutputVolume()
+                info = self.motion.getStiffnesses("Body")
+                stiffness = info[0]
+            except :
+                volume = 0
+                stiffness = 0
+        else:
+            volume = 0
+            stiffness = 0
+        currentLanguage = self.tts.getLanguage()
+        languageList = self.tts.getAvailableLanguages()
+        for i in languageList:
+            supportLanguage += i
+            supportLanguage += "$"
+            if len(supportLanguage) >360:
+                    break
+        robotInfo = struct.pack('!15s40s400s3h',header,currentLanguage,supportLanguage,isRobotics,stiffness,volume)
+        self.sock.sendto(robotInfo,(self.addr, self.port))
+
+    def sendBehaviorMsg(self):
+        header = "BehaviorRes"
+        behaviorList = self.managerProxy.getInstalledBehaviors()
+        runingList = self.managerProxy.getRunningBehaviors()
+        runingBehaviors = ""
+        installBehaviors = ""
+        for i in runingList:
+            i = i.rstrip("/.")
+            runingBehaviors += i
+            runingBehaviors += "$"
+            if len(runingBehaviors) >3900:
+                    break
+        for i in behaviorList:
+            if i.count(".currentChoregrapheBehavior"):
+                pass
+            elif i.count(".lastUploadedChoregrapheBehavior"):
+                pass
+            elif i.count("animation"):
+                pass
+            elif i.count("default"):
+                pass
+            elif i.count("boot-config"):
+                pass
+            elif i.count("diagnostic"):
+                pass
+            else:
+                installBehaviors += i
+                installBehaviors += "$"
+                if len(installBehaviors) >3900:
+                    break
+        robotInfo = struct.pack('!15s4000s4000s',header,runingBehaviors,installBehaviors)
+        self.sock.sendto(robotInfo,(self.addr, self.port))
+
+    def getString(self,p):
+        string = []
+        string = p.split('*|')
+        if len(string)>0:
+            return string[0]
+        else:
+            return ""]]>
+</content>
+                                                </script>
+                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                                                <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+                                                <Parameter name="SendPort" inherits_from_parent="1" content_type="1" value="47301" default_value="47301" min="47301" max="47301" tooltip="" id="4" />
+                                                <Parameter name="threadtime" inherits_from_parent="1" content_type="2" value="0.5" default_value="1" min="0" max="5" tooltip="" id="5" />
+                                                <Parameter name="RecvPort" inherits_from_parent="0" content_type="1" value="47301" default_value="47301" min="47301" max="47301" tooltip="" id="6" />
+                                            </Box>
+                                            <Link inputowner="4" indexofinput="2" outputowner="0" indexofoutput="1" />
+                                        </Diagram>
+                                    </BehaviorKeyframe>
+                                </BehaviorLayer>
+                            </Timeline>
+                        </Box>
+                        <Link inputowner="1" indexofinput="2" outputowner="0" indexofoutput="2" />
+                    </Diagram>
+                </BehaviorKeyframe>
+            </BehaviorLayer>
+        </Timeline>
+    </Box>
+</ChoregrapheProject>
