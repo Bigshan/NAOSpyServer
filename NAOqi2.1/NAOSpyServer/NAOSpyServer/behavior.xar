@@ -58,7 +58,7 @@ class MyClass(GeneratedClass):
     def onInput_onStart(self):
         self.startSocket()
         self.videoProxy.setParam(vision_definitions.kCameraSelectID,0)
-        subscriberID = self.videoProxy.subscribe("shiqishan", 0, 11, 15);
+        subscriberID = self.videoProxy.subscribe("shiqishan", 0, 11, 25);
         self.threadtime = self.getParameter("threadtime")
         while(self.bstart):
             cliSock,(self.addr, self.port) = self.sock.accept()
