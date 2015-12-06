@@ -353,7 +353,7 @@ class MyClass(GeneratedClass):
 
     def sendOnlineMsg(self):
         header = "NVOnlineRes"
-        version = "SP1.1"
+        version = "SP11"
         name = " "
         isRobotics = 1
         try:
