@@ -61,7 +61,7 @@ class MyClass(GeneratedClass):
         while(self.bstart):
             cliSock,(self.addr, self.port) = self.sock.accept()
             cliSock.settimeout(4)
-            self.logger.info("connect from...%s",self.addr)
+            self.logger.info("TCP Connect from...%s",self.addr)
             while(True):
                 try:
                     msg = cliSock.recv(500)
@@ -70,15 +70,12 @@ class MyClass(GeneratedClass):
                         image = imageArr[6]
                         cliSock.sendall(image)
                     elif msg.startswith("NVImageClose",0,16):
-                        self.logger.info("22222222222222")
+                        self.logger.info("TCP Connect Closed")
                         break
                     elif msg.startswith("CameraMsg",0,16):
-                        self.logger.info("44444444...%s",msg)
                         msg = msg[0:11]
                         index = int(msg[-2])
                         resolution = int(msg[-1])
-                        self.logger.info("index....%d",index)
-                        self.logger.info("resolution....%d",resolution)
                         self.videoProxy.setParam(vision_definitions.kCameraSelectID,index)
                         self.videoProxy.setResolution(subscriberID, resolution)
                         time.sleep(0.2)
@@ -90,8 +87,7 @@ class MyClass(GeneratedClass):
                         content = self.getString(info)
                         self.outputText(content)
                 except:
-                    self.logger.info("3333333333333")
-
+                    self.logger.info("TCP Connect shutDown")
                     break
             cliSock.close()
 
@@ -112,7 +108,6 @@ class MyClass(GeneratedClass):
                 self.logger.info("port...%d",port)
                 break
             except:
-                self.logger.info("...%d...failed",port)
                 port += 1
         self.sock.listen(5)
     def getString(self,p):
@@ -288,9 +283,7 @@ class MyClass(GeneratedClass):
     def msg_unpack(self):
         if self.msg == "NVOnlineReq":
             self.sendOnlineMsg()
-            self.logger.info("online send info...")
         elif (self.msg.startswith('WalkMsg',0,16)):
-            self.logger.info("walk send info...")
             header,walkX,walkY,theta,frequency = struct.unpack("!16s4i",self.msg)
             walkX = walkX/167772160.0
             walkY = walkY/167772160.0
@@ -317,7 +310,6 @@ class MyClass(GeneratedClass):
             self.sendBehaviorMsg()
         elif(self.msg.startswith('SettingsMsg',0,16)):
             header,info1,info2 = struct.unpack("!16s20s40s",self.msg)
-            self.logger.info("setting msg ...%s",self.msg)
             body = self.getString(info1)
             value = self.getString(info2)
             if(body == "Stiffness"):
@@ -335,7 +327,6 @@ class MyClass(GeneratedClass):
                 result = self.postureProxy.goToPosture(value,0.6)
         elif(self.msg.startswith('BehaviorMsg',0,16)):
             header,info1,info2,info3 = struct.unpack("!16s20s20s100s",self.msg)
-            self.logger.info("beha msg ...%s",self.msg)
             targetIP = self.getString(info1)
             body = self.getString(info2)
             behavior = self.getString(info3)
@@ -408,13 +399,13 @@ class MyClass(GeneratedClass):
             i = i.rstrip("/.")
             defaultBehaviors += i
             defaultBehaviors += "$"
-            if len(defaultBehaviors) >3900:
+            if len(defaultBehaviors) >1900:
                     break
         for i in runingList:
             i = i.rstrip("/.")
             runingBehaviors += i
             runingBehaviors += "$"
-            if len(runingBehaviors) >3900:
+            if len(runingBehaviors) >2940:
                     break
         for i in behaviorList:
             if i.count(".currentChoregrapheBehavior"):
@@ -432,10 +423,9 @@ class MyClass(GeneratedClass):
             else:
                 installBehaviors += i
                 installBehaviors += "$"
-                if len(installBehaviors) >7900:
+                if len(installBehaviors) >5940:
                     break
-        self.logger.info("send behavior msg")
-        robotInfo = struct.pack('!15s2000s2000s4000s',header,defaultBehaviors,runingBehaviors,installBehaviors)
+        robotInfo = struct.pack('!15s1965s2500s4500s',header,defaultBehaviors,runingBehaviors,installBehaviors)
         self.sock.sendto(robotInfo,(self.addr, self.port))
 
     def getString(self,p):
