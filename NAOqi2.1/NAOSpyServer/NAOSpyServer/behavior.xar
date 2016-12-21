@@ -29,7 +29,7 @@
                                 <BehaviorLayer name="ReqAndRes">
                                     <BehaviorKeyframe name="ReqAndRes" index="1">
                                         <Diagram>
-                                            <Box name="GETServer" id="1" localization="8" tooltip="server" x="255" y="125">
+                                            <Box name="GETServer" id="1" localization="8" tooltip="server" x="149" y="20">
                                                 <bitmap>media/images/box/box-diagram.png</bitmap>
                                                 <script language="4">
                                                     <content>
@@ -38,12 +38,14 @@ import json
 class MyClass(GeneratedClass):
     def __init__(self):
         GeneratedClass.__init__(self)
+        self.RecvPort = 47351
+        self.recvHeader = "NAOSpy-hsukanbgdo"
+        self.sendHeader = "NAOSpy-shsuammsoxo"
+        ###################################
         self.motion = ALProxy("ALMotion")
         self.managerProxy = ALProxy("ALBehaviorManager")
         self.tts = ALProxy("ALTextToSpeech")
         self.memory = ALProxy("ALMemory")
-        self.RecvPort = 47351
-        self.sendPort = 47354
         self.addrDic = {}
         self.isRobotics = 0
         self.isSelected = 0
@@ -59,7 +61,7 @@ class MyClass(GeneratedClass):
 
     def onUnload(self):
         self.bstart = False
-        self.sock.close()
+        #self.sock.close()
 
     def gotoState(self, p):
         try:
@@ -71,28 +73,23 @@ class MyClass(GeneratedClass):
         self.getParentTimeline().pause()
         while(self.bstart):
             try:
-                data,(self.host,port) = self.sock.recvfrom( 1000)
+                data,(host,port) = self.sock.recvfrom( 1000)
                 recvDic = {}
                 try:
                     recvDic = json_loads_byteified(data)
                 except Exception as e:
                     self.logger.info("data:%s..json..error..%s",data,e)
                 try:
-                    header = recvDic["header"]
-                    if header == "NAOController-fsjahfjh":
-                        recvPort = int(recvDic["recvPort"])
-                        self.sendPort = recvPort
-                        self.recvDicUnpack(recvDic)
+                    if recvDic["header"] == self.recvHeader:
+                        self.recvDicUnpack(recvDic,host)
                 except Exception as e:
                     self.logger.info("%s..msg..unpack..error.%s",data,e)
             except Exception as e:
                 self.logger.info("online..req..error..%s",e)
 
-    def sendData(self, p):
+    def sendData(self, data, host, port):
         try:
-            data = {"header":"NAOController-sfhajkfhf"}
-            data.update(p)
-            self.sock.sendto(json.dumps(data,separators=(',',':')),(self.host,self.sendPort))
+            self.sock.sendto(json.dumps(data,separators=(',',':')),(host,port))
         except Exception as e:
             self.logger.info("send data..:%s error..%s",data,e)
     def onInput_onStop(self):
@@ -104,41 +101,33 @@ class MyClass(GeneratedClass):
         self.sock.bind(('',self.RecvPort))
 
 ################################################
-    def recvDicUnpack(self, dic):
+    def recvDicUnpack(self, dic, host):
         path = dic["path"]
         tag = dic["tag"]
-        baseDic = {"tag":tag}
-        if path == "NC--robots-online":
+        port = int(dic["recvPort"])
+        baseDic = {"tag":tag,"header":self.sendHeader}
+        outputDic = {}
+        if path == "NP--robots-online":
             outputDic = self.getOnlineDic(dic)
-            outputDic.update(baseDic)
-            self.sendData(outputDic)
         elif path == "NC--behavior-all":
             if self.isSelected:
                 outputDic = self.getBehaviorsDic(dic)
-                outputDic.update(baseDic)
-                self.sendData(outputDic)
         elif path == "NC--settings-info":
             if self.isSelected:
                 outputDic = self.getSettingsDic(dic)
-                outputDic.update(baseDic)
-                self.sendData(outputDic)
         elif path == "NC--speech-setinfo":
             if self.isSelected:
                 outputDic = self.getSpeechSetDic(dic)
-                outputDic.update(baseDic)
-                self.sendData(outputDic)
-        elif path == "NC--robots-config-on":
-            timediff = float(dic["timeDiff"])
+        elif path == "NP--robots-connect":
             localIP = dic["loaclIP"]
-            self.memory.insertData("NAOController-TimeDiff",timediff)
-            self.memory.insertData("NAOController-LocalIP",localIP)
+            self.memory.insertData("NAOSpy-LocalIP",localIP)
             self.isSelected = 1
-            self.sendData(baseDic)
             self.gotoState(20)
-        elif path == "NC--robots-config-off":
+        elif path == "NP--robots-disconnect":
             self.isSelected = 0
             self.gotoState(0)
-            self.sendData(baseDic)
+        outputDic.update(baseDic)
+        self.sendData(outputDic,host,port)
 
     def getOnlineDic(self, dic):
         recvTime = dic["sendTime"]
@@ -309,19 +298,31 @@ import time
 import json
 import sys
 import threading
+import vision_definitions
+import base64
+try:
+    import numpy
+    import cv2
+except Exception as e:
+    pass
 class MyClass(GeneratedClass):
     def __init__(self):
         GeneratedClass.__init__(self)
+        self.RecvPort = 47353
+        self.recvHeader = "NAOSpy-hsukanbgdo"
+        self.sendHeader = "NAOSpy-shsuammsoxo"
+        #####################################
         self.memory = ALProxy("ALMemory")
         self.motion = ALProxy("ALMotion")
         self.postureProxy = ALProxy("ALRobotPosture")
         self.managerProxy = ALProxy("ALBehaviorManager")
         self.tts = ALProxy("ALTextToSpeech")
-        self.RecvPort = 47353
-        self.sendPort = 47354
+        self.videoProxy= ALProxy("ALVideoDevice")
         self.notiTag = 70000000
         self.ncid = ""
         self.ip = ""
+        self.imageCount = 0
+        self.bSendImage = False
         self.startSocket()
         reload(sys)
         sys.setdefaultencoding('utf-8')
@@ -331,55 +332,69 @@ class MyClass(GeneratedClass):
         self.timeIds = []
     def onUnload(self):
         self.bstart = False
+        self.bSendImage = False
+        self.logger.info("......!!!....onUnload..")
+        self.videoProxy.unsubscribe(self.subscriberID)
     def onInput_onStart(self):
         self.tags = []
+        self.videoProxy.setParam(vision_definitions.kCameraSelectID,0)
+        subStr = "shiqishans"+str(time.time())
+        self.subscriberID = self.videoProxy.subscribe(subStr, 1, 13, 25)
         while(self.bstart):
             try:
-                data,(self.host,port) = self.sock.recvfrom( 1600)
+                data,(host,port) = self.sock.recvfrom(1600)
                 recvDic = {}
                 try:
                     recvDic = json_loads_byteified(data)
                 except Exception as e:
                     self.logger.info("data:%s..json..error..%s",data,e)
                 if self.ip == "":
-                    self.ip = self.memory.getData("NAOController-LocalIP")
+                    self.ip = self.memory.getData("NAOSpy-LocalIP")
                 try:
                     header = recvDic["header"]
                     targets = recvDic["targets"]
-                    if header == "NAOController-fsjahfjh" and targets.count(self.ip):
-                        recvPort = int(recvDic["recvPort"])
-                        self.sendPort = recvPort
-                        self.recvDicUnpack(recvDic)
+                    if header == self.recvHeader and targets.count(self.ip):
+                        self.logger.info("!!!!!msg..unpack..%s",recvDic)
+                        self.recvDicUnpack(recvDic,host)
                 except Exception as e:
                     self.logger.info("%s..msg..unpack..error.%s",data,e)
             except Exception as e:
                 self.logger.info("post..req..error..%s",e)
     def onInput_onStop(self):
         self.onUnload()
-        self.sock.close()
+        #self.sock.close()
     def startSocket(self):
         self.sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
         self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
         self.sock.bind(('',self.RecvPort))
-    def recvDicUnpack(self, dic):
+    def recvDicUnpack(self, dic, host):
         path = dic["path"]
         tag = dic["tag"]
         ncid = dic["ncid"]
-
+        port = int(dic["recvPort"])
+        baseDic = {"tag":tag,"header":self.sendHeader}
         if self.ncid != ncid:
             self.tags = []
             self.ncid = ncid
 
         if self.tags.count(tag) >=1 :
-            self.sendData({"tag":tag})
+            self.sendData(baseDic,host,port)
             return
         if(path == "NC--notification-on"):
             pass
         elif(path == "NC--notification-off"):
             pass
+        elif path == "NP--image--start":
+            self.sendData(baseDic,host,port)
+            self.tags.append(tag)
+            self.startSendImage(host,port)
+        elif path == "NP--image--stop":
+            self.bSendImage = False
+            self.sendData(baseDic,host,port)
+            self.tags.append(tag)
         elif(path == "NC--motion-walk"):
             if int(tag) >= 10000000:
-                self.sendData({"tag":tag})
+                self.sendData(baseDic,host,port)
             walkX = int(dic["x"])/10.0
             walkY = int(dic["y"])/10.0
             theta = int(dic["thera"])/10.0
@@ -401,12 +416,12 @@ class MyClass(GeneratedClass):
                 self.motion.changeAngles("HeadYaw",walkY,0.2)
         elif(path == "NC--motion-posture"):
             posture = dic["posture"]
-            self.sendData({"tag":tag})
+            self.sendData(baseDic,host,port)
             self.tags.append(tag)
             self.postureProxy.setMaxTryNumber(2)
             result = self.postureProxy.goToPosture(posture,0.7)
         elif(path == "NC--behavior-single"):
-            self.sendData({"tag":tag})
+            self.sendData(baseDic,host,port)
             self.tags.append(tag)
             command = dic["command"]
             behavior = dic["behavior"]
@@ -419,38 +434,13 @@ class MyClass(GeneratedClass):
                 self.managerProxy.addDefaultBehavior(behavior)
             elif(command == "remove"):
                 self.managerProxy.removeDefaultBehavior(behavior)
-        elif(path == "NC--behavior-sync"):
-            command = dic["command"]
-            behavior = dic["behavior"]
-            if(command == "start"):
-                timeDiff = self.memory.getData("NAOController-TimeDiff")
-                deny = 0.0
-                try:
-                    timedic = dic["timeDic"]
-                    deny = float(timedic[self.ip])
-                except :
-                    pass
-                runtime = float(dic["runtime"])+timeDiff - time.time()+deny
-                if runtime >=0:
-                    behaviorStart(runtime,behavior)
-                    self.managerProxy.preloadBehavior(behavior)
-                else:
-                    self.managerProxy.post.runBehavior(behavior)
-
-            elif(command == "stop"):
-                if (self.managerProxy.isBehaviorRunning(behavior)):
-                    self.managerProxy.stopBehavior(behavior)
-
-            self.sendData({"tag":tag})
-            self.tags.append(tag)
-
         elif(path == "NC--speech-speech"):
-            self.sendData({"tag":tag})
+            self.sendData(baseDic,host,port)
             self.tags.append(tag)
             message = dic["message"]
             self.outputText(message)
         elif(path == "NC--settings-set"):
-            self.sendData({"tag":tag})
+            self.sendData(baseDic,host,port)
             self.tags.append(tag)
             key = dic["key"]
             value = dic["value"]
@@ -490,19 +480,69 @@ class MyClass(GeneratedClass):
         else:
             pass
 
-    def sendData(self, p):
+    def sendData(self, data, host, port):
         try:
-            data = {"header":"NAOController-sfhajkfhf"}
-            data.update(p)
-            self.sock.sendto(json.dumps(data,separators=(',',':')),(self.host,self.sendPort))
+            self.sock.sendto(json.dumps(data,separators=(',',':')),(host,port))
         except Exception as e:
-            self.logger.info("send data..:%s error..%s",p,e)
+            self.logger.info("send data..:%s error..%s",data,e)
+    ####Image###################################################
+    def startSendImage(self, host, port):
+        if not self.bSendImage:
+            self.bSendImage = True
+            t = threading.Thread(target=self.__class__.sendImage,args=(self, host,port))
+            t.setDaemon(True)
+            t.start()
+    def sendImage(self, host, port):
+        self.logger.info("SendImage....%s...%s",host,port)
+        self.bSendImage = True
+        while(self.bSendImage):
+            self.sendImageData(host,port)
+    def stopSendImage(self):
+        self.bSendImage = False
+    def getImageStr(self):
+        imageArr = self.videoProxy.getImageRemote(self.subscriberID)
+        image = imageArr[6]
+        array=bytearray(image)
+        data=numpy.array(array)
+        data=data.reshape([imageArr[1],imageArr[0],3])
+        param = 95
+        if int(imageArr[0]) == 320:
+            param = 95
+        elif int(imageArr[0]) == 640:
+            param = 91
+        elif int(imageArr[0]) == 1280:
+            param = 60
+        buf = cv2.imencode('.jpg',data,[int(cv2.IMWRITE_JPEG_QUALITY), param])[1]
+        return base64.b64encode(buf)
 
+    def sendImageData(self, host, port):
+        imageStr = self.getImageStr()
+        self.logger.info("SendImageData..imageStr..%s...%s",host,port)
+        self.imageCount += 1
+        piceSize = 62000
+        totalSize = len(imageStr)
+        sum = 0
+        count = 0
+        total = totalSize/piceSize + min(totalSize%piceSize,1)
+        self.logger.info("totalSize......%f",totalSize)
+        while sum < totalSize:
+            sendStr = ""
+            if sum + piceSize >= totalSize:
+                sendStr = imageStr[sum:]
+                sum = totalSize
+            else:
+                sendStr = imageStr[sum:sum+piceSize]
+                sum += piceSize
+            data = {"header":self.sendHeader,"tag":"3000","count":str(count),"total":str(total),"image":str(sendStr),"imageCount":str(self.imageCount)}
+            self.logger.info("count,,,,,,,,,,,,,,,,,,%d",self.imageCount)
+            self.sendData(data,host,port)
+            count += 1
+    ####Notification############################################
     def sendNotification(self, p):
         try:
             data = {"header":"NAOController-sfhajkfhf","tag":self.notiTag}
             data.update(p)
-            self.sock.sendto(json.dumps(data,separators=(',',':')),(self.host,self.sendPort))
+            #self.sock.sendto(json.dumps(data,separators=(',',':')),(self.host,self.sendPort))
             self.notiTag = self.notiTag+1
         except Exception as e:
             self.logger.info("send notification..:%s error..%s",p,e)
@@ -694,202 +734,8 @@ class MyClass(GeneratedClass):
                                                 <Parameter name="Voice shaping (%)" inherits_from_parent="1" content_type="1" value="100" default_value="100" min="50" max="150" tooltip='Used to modify at runtime the voice feature (tone, speed). In a slighty&#x0A;different way than pitch and speed, it gives a kind of &quot;gender or age&#x0A;modification&quot; effect.&#x0A;&#x0A;For instance, a quite good male derivation of female voice can be&#x0A;obtained setting this parameter to 78%.&#x0A;&#x0A;Note: For a better effect, you can compensate this parameter with the&#x0A;speed parameter. For example, if you want to decrease by 20% the voice&#x0A;shaping, you will have to increase by 20% the speed to keep a constant&#x0A;average speed.' id="5" />
                                                 <Parameter name="Speed (%)" inherits_from_parent="1" content_type="1" value="100" default_value="100" min="50" max="200" tooltip="Changes the speed of the voice.&#x0A;&#x0A;Note: For a better effect, you can compensate this parameter with the voice&#x0A;shaping parameter. For example, if you want to increase by 20% the speed, you&#x0A;will have to decrease by 20% the voice shaping to keep a constant average&#x0A;speed." id="6" />
                                             </Box>
-                                            <Box name="GETServertest" id="1" localization="8" tooltip="server" x="478" y="270">
-                                                <bitmap>media/images/box/box-diagram.png</bitmap>
-                                                <script language="4">
-                                                    <content>
-                                                        <![CDATA[import socket
-import json
-import struct
-import vision_definitions
-import base64
-import threading
-try:
-    import numpy
-    import cv2
-except Exception as e:
-    pass
-
-class MyClass(GeneratedClass):
-    def __init__(self):
-        GeneratedClass.__init__(self)
-        self.videoProxy= ALProxy("ALVideoDevice")
-        self.motion = ALProxy("ALMotion")
-        self.managerProxy = ALProxy("ALBehaviorManager")
-        self.tts = ALProxy("ALTextToSpeech")
-        self.memory = ALProxy("ALMemory")
-        self.RecvPort = 47351
-        self.sendPort = 47354
-        self.addrDic = {}
-        self.isRobotics = 0
-        self.isSelected = 0
-        self.imageCount = 0
-        self.bSendImage = False
-        try:
-            self.audio = ALProxy("ALAudioDevice")
-            self.isRobotics = 1
-        except Exception as e:
-            self.audio = None
-            self.isRobotics = 0
-        #self.startSocket()
-    def onLoad(self):
-        self.bstart = True
-
-    def onUnload(self):
-        self.bSendImage = False
-        self.bstart = False
-        self.videoProxy.unsubscribe(self.subscriberID)
-        self.sock.close()
-
-    def gotoState(self, p):
-        try:
-            self.getParentTimeline().goTo(p)
-        except:
-            self.gotoAndStopParent(p)
-
-    def onInput_onStart(self):
-        self.getParentTimeline().pause()
-        self.videoProxy.setParam(vision_definitions.kCameraSelectID,0)
-        self.subscriberID = self.videoProxy.subscribe("shiqishan1", 3, 13, 25)
-        while(self.bstart):
-            try:
-                data,(self.host,port) = self.sock.recvfrom( 1000)
-                recvDic = {}
-                try:
-                    recvDic = json_loads_byteified(data)
-                except Exception as e:
-                    self.logger.info("data:%s..json..error..%s",data,e)
-                try:
-                    header = recvDic["header"]
-                    if header == "NAOController-fsjahfjh":
-                        recvPort = int(recvDic["recvPort"])
-                        self.sendPort = recvPort
-                        try:
-                            self.recvDicUnpack(recvDic)
-                        except Exception as e:
-                            self.logger.info("msg..nimabi..error.%s",e)
-                except Exception as e:
-                    self.logger.info("%s..msg..unpack..error.%s",data,e)
-
-            except Exception as e:
-                self.logger.info("online..req..error..%s",e)
-    def onInput_onStop(self):
-        self.onUnload()
-
-    def startSocket(self):
-        self.sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
-        self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-        self.sock.bind(('',self.RecvPort))
-
-################################################
-    def recvDicUnpack(self, dic):
-        path = dic["path"]
-        tag = dic["tag"]
-        baseDic = {"tag":tag}
-        if path == "NC--robots-online":
-            outputDic = self.getOnlineDic(dic)
-            outputDic.update(baseDic)
-            self.sendData(outputDic)
-        elif path == "NC--image--start":
-            self.sendData(baseDic)
-            self.startSendImage()
-
-        elif path == "NC--image--stop":
-            self.bSendImage = False
-            self.sendData(baseDic)
-
-    def startSendImage(self):
-        if not self.bSendImage:
-            self.bSendImage = True
-            t = threading.Thread(target=self.__class__.sendImage,args=(self,))
-            t.setDaemon(True)
-            t.start()
-
-    def stopSendImage(self):
-        self.bSendImage = False
-
-    def sendImage(self):
-        while(self.bSendImage):
-            self.sendImageData()
-
-    def getImageStr(self):
-        imageArr = self.videoProxy.getImageRemote(self.subscriberID)
-        image = imageArr[6]
-        array=bytearray(image)
-        data=numpy.array(array)
-        data=data.reshape([imageArr[1],imageArr[0],3])
-        param = 95
-        if int(imageArr[0]) == 320:
-            param = 95
-        elif int(imageArr[0]) == 640:
-            param = 91
-        elif int(imageArr[0]) == 1280:
-            param = 60
-        buf = cv2.imencode('.jpg',data,[int(cv2.IMWRITE_JPEG_QUALITY), param])[1]
-        return base64.b64encode(buf)
-
-    def sendImageData(self):
-        imageStr = self.getImageStr()
-        self.imageCount += 1
-        piceSize = 62000
-        totalSize = len(imageStr)
-        sum = 0
-        count = 0
-        total = totalSize/piceSize + min(totalSize%piceSize,1)
-        self.logger.info("totalSize,,,,,%f",totalSize)
-        while sum < totalSize:
-            sendStr = ""
-            if sum + piceSize >= totalSize:
-                sendStr = imageStr[sum:]
-                sum = totalSize
-            else:
-                sendStr = imageStr[sum:sum+piceSize]
-                sum += piceSize
-            data = {"tag":"3000","count":str(count),"total":str(total),"image":str(sendStr),"imageCount":str(self.imageCount)}
-            #self.logger.info("count,,,,,,,,,,,,,,,,,,%d",count)
-            self.sendData(data)
-            count += 1
-
-
-    def sendData(self, p):
-        try:
-            data = {"header":"NAOController-sfhajkfhf"}
-            data.update(p)
-            self.sock.sendto(json.dumps(data,separators=(',',':')),(self.host,self.sendPort))
-        except Exception as e:
-            self.logger.info("send data..:%s error..%s",p,e)
-
-####################################################
-
-
-
-########################################################
-def json_loads_byteified(json_text):
-    return _byteify(
-        json.loads(json_text, object_hook=_byteify),
-        ignore_dicts=True
-    )
-
-def _byteify(data, ignore_dicts = False):
-    if isinstance(data, unicode):
-        return data.encode('utf-8')
-    if isinstance(data, list):
-        return [ _byteify(item, ignore_dicts=True) for item in data ]
-    if isinstance(data, dict) and not ignore_dicts:
-        return {
-            _byteify(key, ignore_dicts=True): _byteify(value, ignore_dicts=True)
-            for key, value in data.iteritems()
-        }
-    return data]]>
-</content>
-                                                </script>
-                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
-                                                <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
-                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
-                                            </Box>
                                             <Link inputowner="3" indexofinput="2" outputowner="0" indexofoutput="1" />
                                             <Link inputowner="5" indexofinput="2" outputowner="0" indexofoutput="1" />
-                                            <Link inputowner="3" indexofinput="3" outputowner="5" indexofoutput="4" />
                                             <Link inputowner="2" indexofinput="2" outputowner="3" indexofoutput="5" />
                                         </Diagram>
                                     </BehaviorKeyframe>
