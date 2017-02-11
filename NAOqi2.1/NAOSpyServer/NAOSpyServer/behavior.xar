@@ -26,7 +26,7 @@
                             <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
                             <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
                             <Timeline enable="1" fps="25" start_frame="1" end_frame="-1" size="-1">
-                                <BehaviorLayer name="ReqAndRes">
+                                <BehaviorLayer name="ReqAndRes" mute="1">
                                     <BehaviorKeyframe name="ReqAndRes" index="1">
                                         <Diagram>
                                             <Box name="GETServer" id="1" localization="8" tooltip="server" x="149" y="20">
@@ -283,7 +283,7 @@ def _byteify(data, ignore_dicts = False):
                                         </Diagram>
                                     </BehaviorKeyframe>
                                 </BehaviorLayer>
-                                <BehaviorLayer name="Behavior Cilent">
+                                <BehaviorLayer name="Behavior Cilent" mute="1">
                                     <BehaviorKeyframe name="Selection_off" index="1">
                                         <Diagram />
                                     </BehaviorKeyframe>
@@ -737,6 +737,170 @@ class MyClass(GeneratedClass):
                                             <Link inputowner="3" indexofinput="2" outputowner="0" indexofoutput="1" />
                                             <Link inputowner="5" indexofinput="2" outputowner="0" indexofoutput="1" />
                                             <Link inputowner="2" indexofinput="2" outputowner="3" indexofoutput="5" />
+                                        </Diagram>
+                                    </BehaviorKeyframe>
+                                </BehaviorLayer>
+                                <BehaviorLayer name="HttpServer">
+                                    <BehaviorKeyframe name="HttpServer" index="1">
+                                        <Diagram>
+                                            <Box name="HttpServer" id="2" localization="8" tooltip="HttpServer" x="134" y="64">
+                                                <bitmap>media/images/box/box-python-script.png</bitmap>
+                                                <script language="4">
+                                                    <content>
+                                                        <![CDATA[from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+import json
+import base64
+import urllib
+import threading
+import httplib
+
+httpServer = None
+packageManager =  ALProxy("PackageManager")
+managerProxy = ALProxy("ALBehaviorManager")
+KEEP_RUNNING = True
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+        pass
+    def onLoad(self):
+        self.keepRunning = True
+
+    def onUnload(self):
+        self.keepRunning = False
+        stopHttpServer()
+    def onInput_onStart(self):
+        global httpServer
+        self.getParentTimeline().pause()
+
+        port = startHttpServer(47354)
+
+        self.logger.info("HTTP Server Port:%d",port)
+
+
+        httpServer.serve_forever()
+
+        #httpServer.shutdown
+        #if httpServer:
+            #httpServer.serve_forever()
+    def handleHttpRequest(self):
+        self.logger.info("nimabiii...")
+        #while KEEP_RUNNING:handle_request()
+        httpServer.serve_forever()
+    def onInput_onStop(self):
+        self.onUnload() #it is recommended to reuse the clean-up as the box is stopped
+        self.onStopped() #activate the output of the box
+
+
+class HttpServerHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.protocal_version = "HTTP/1.1"
+        self.send_response(200)
+        self.send_header("Content-type","text/json")
+        self.end_headers()
+        mpath,margs=urllib.splitquery(self.path)
+
+        self.GET_Action(mpath,margs)
+
+        #icon = packageManager.packageIcon("naocontrollerserver-byqishanshi")
+        #base6 = base64.b64encode(icon)
+    def do_POST(self):
+        self.protocal_version = "HTTP/1.1"
+
+        self.send_response(200)
+        self.send_header("Content-type","text/json")
+        self.end_headers()
+        data = {"path":self.path}
+        self.wfile.write(json.dumps(data,separators=(',',':')))
+
+    def GET_Action(self, mpath, margs):
+        dataDic = None
+        dataDic = {"path":mpath,"margs":margs}
+        if mpath == "/behavior/all":
+            dataDic = getBehaviorsDic()
+        elif mpath == "/behaviorIcon":
+            dataDic = {"mar":margs}
+            if margs:
+                icon = packageManager.packageIcon(margs)
+                if len(icon) >0:
+                    base6 = base64.b64encode(icon)
+                    dataDic = {"margs":margs,"image":base6}
+        else:
+            dataDic = {"sdnk":"dsnljknfds"}
+
+        if dataDic:
+            self.wfile.write(json.dumps(dataDic,separators=(',',':')))
+
+class HttpServer(HTTPServer):
+    allow_reuse_address = True
+    def serve_forever(self):
+        self.stopped = False
+        while not self.stopped:
+            self.handle_request()
+        self.server_close()
+    def force_stop(self):
+        self.stopped = True
+        conn = httplib.HTTPConnection("%s:%s"%self.server_address)
+        conn.request("QUIT", "/")
+
+#######################################################################
+def getBehaviorsDic():
+    defaultList = managerProxy.getDefaultBehaviors()
+    behaviorList = managerProxy.getInstalledBehaviors()
+    runingList = managerProxy.getRunningBehaviors()
+    behaviors = ""
+    for i in behaviorList:
+        if i.count(".currentChoregrapheBehavior"):
+            pass
+        elif i.count(".lastUploadedChoregrapheBehavior"):
+            pass
+        elif i.count("animation"):
+            pass
+        elif i.count("default"):
+            pass
+        elif i.count("boot-config"):
+            pass
+        elif i.count("diagnostic"):
+            pass
+        else:
+            isDefault = "N"
+            isRuning = "N"
+            if defaultList.count(i):
+                isDefault = "Y"
+            if runingList.count(i):
+                isRuning = "Y"
+            i += isDefault
+            i += isRuning
+            behaviors += i
+            behaviors += "$"
+    data = {"behaviors":behaviors}
+    return data
+
+#######################################################################
+def startHttpServer(port):
+    global httpServer
+    currentPort = port
+    while True:
+        try:
+            httpServer = HttpServer(('', currentPort),HttpServerHandler)
+            break
+        except Exception as e:
+            currentPort += 1
+    return currentPort
+
+def stopHttpServer():
+    global httpServer
+    try:
+        httpServer.force_stop()
+    except Exception as e:
+        pass]]>
+</content>
+                                                </script>
+                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                                                <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+                                                <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="指令盒行为结束时，送出信号。" id="4" />
+                                            </Box>
+                                            <Link inputowner="2" indexofinput="2" outputowner="0" indexofoutput="1" />
                                         </Diagram>
                                     </BehaviorKeyframe>
                                 </BehaviorLayer>
