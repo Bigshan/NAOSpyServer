@@ -26,7 +26,7 @@
                             <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
                             <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
                             <Timeline enable="1" fps="25" start_frame="1" end_frame="-1" size="-1">
-                                <BehaviorLayer name="ReqAndRes" mute="1">
+                                <BehaviorLayer name="ReqAndRes">
                                     <BehaviorKeyframe name="ReqAndRes" index="1">
                                         <Diagram>
                                             <Box name="GETServer" id="1" localization="8" tooltip="server" x="149" y="20">
@@ -283,7 +283,7 @@ def _byteify(data, ignore_dicts = False):
                                         </Diagram>
                                     </BehaviorKeyframe>
                                 </BehaviorLayer>
-                                <BehaviorLayer name="Behavior Cilent" mute="1">
+                                <BehaviorLayer name="Behavior Cilent">
                                     <BehaviorKeyframe name="Selection_off" index="1">
                                         <Diagram />
                                     </BehaviorKeyframe>
@@ -740,7 +740,7 @@ class MyClass(GeneratedClass):
                                         </Diagram>
                                     </BehaviorKeyframe>
                                 </BehaviorLayer>
-                                <BehaviorLayer name="HttpServer">
+                                <BehaviorLayer name="HttpServer" mute="1">
                                     <BehaviorKeyframe name="HttpServer" index="1">
                                         <Diagram>
                                             <Box name="HttpServer" id="2" localization="8" tooltip="HttpServer" x="134" y="64">
@@ -748,6 +748,7 @@ class MyClass(GeneratedClass):
                                                 <script language="4">
                                                     <content>
                                                         <![CDATA[from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from SocketServer import ThreadingMixIn
 import json
 import base64
 import urllib
@@ -794,18 +795,13 @@ class MyClass(GeneratedClass):
 class HttpServerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.protocal_version = "HTTP/1.1"
-        self.send_response(200)
-        self.send_header("Content-type","text/json")
-        self.end_headers()
+
+
         mpath,margs=urllib.splitquery(self.path)
 
         self.GET_Action(mpath,margs)
-
-        #icon = packageManager.packageIcon("naocontrollerserver-byqishanshi")
-        #base6 = base64.b64encode(icon)
     def do_POST(self):
         self.protocal_version = "HTTP/1.1"
-
         self.send_response(200)
         self.send_header("Content-type","text/json")
         self.end_headers()
@@ -818,19 +814,28 @@ class HttpServerHandler(BaseHTTPRequestHandler):
         if mpath == "/behavior/all":
             dataDic = getBehaviorsDic()
         elif mpath == "/behaviorIcon":
-            dataDic = {"mar":margs}
+            dataDic = None
             if margs:
                 icon = packageManager.packageIcon(margs)
                 if len(icon) >0:
-                    base6 = base64.b64encode(icon)
-                    dataDic = {"margs":margs,"image":base6}
+                    self.send_response(200)
+                    self.send_header("Content-type","image/png")
+                    self.end_headers()
+                    self.wfile.write(icon)
+                else:
+                    self.send_error(404,"File Not Found")
+            else:
+                self.send_error(404,"File Not Found")
         else:
             dataDic = {"sdnk":"dsnljknfds"}
 
         if dataDic:
+            self.send_response(200)
+            self.send_header("Content-type","text/json")
+            self.end_headers()
             self.wfile.write(json.dumps(dataDic,separators=(',',':')))
 
-class HttpServer(HTTPServer):
+class HttpServer(ThreadingMixIn,HTTPServer):
     allow_reuse_address = True
     def serve_forever(self):
         self.stopped = False
@@ -899,6 +904,189 @@ def stopHttpServer():
                                                 <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
                                                 <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
                                                 <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="指令盒行为结束时，送出信号。" id="4" />
+                                            </Box>
+                                            <Link inputowner="2" indexofinput="2" outputowner="0" indexofoutput="1" />
+                                        </Diagram>
+                                    </BehaviorKeyframe>
+                                </BehaviorLayer>
+                                <BehaviorLayer name="TCPServer">
+                                    <BehaviorKeyframe name="TCPServer" index="1">
+                                        <Diagram>
+                                            <Box name="TCPServer" id="2" localization="8" tooltip="TCPServer" x="173" y="87">
+                                                <bitmap>media/images/box/box-python-script.png</bitmap>
+                                                <script language="4">
+                                                    <content>
+                                                        <![CDATA[
+from SocketServer import ThreadingTCPServer,BaseRequestHandler
+import json
+import base64
+import threading
+import socket
+import sys
+import vision_definitions
+try:
+    import numpy
+    import cv2
+except Exception as e:
+    pass
+
+myTCPServer = None
+packageManager =  ALProxy("PackageManager")
+managerProxy = ALProxy("ALBehaviorManager")
+videoProxy= ALProxy("ALVideoDevice")
+
+KHeaderStr = "$$qishanshi$$"
+kEndStr = "\r\n"
+
+videoSubscriberID = ""
+
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+        reload(sys)
+        sys.setdefaultencoding('utf-8')
+    def onLoad(self):
+        pass
+
+    def onUnload(self):
+        stopTCPServer()
+        videoProxy.unsubscribe(videoSubscriberID)
+
+    def onInput_onStart(self):
+        global myTCPServer,videoSubscriberID
+        self.getParentTimeline().pause()
+
+        videoProxy.setParam(vision_definitions.kCameraSelectID,0)
+        subStr = "shiqishanspy"+str(time.time())
+        videoSubscriberID = videoProxy.subscribe(subStr, 3, 13, 25)
+
+        port = getTCPPort(47354)
+
+        self.logger.info("TCP Server Port:%d",port)
+
+        myTCPServer.serve_forever()
+
+    def onInput_onStop(self):
+        self.onUnload()
+
+class MyTCPHandler(BaseRequestHandler):
+    def handle(self):
+        while 1:
+            self.data = self.request.recv(1024).strip()
+            recvDic = {}
+            try:
+                recvDic = json_loads_byteified(self.data)
+            except Exception as e:
+                break
+            path = recvDic["path"]
+            if path == "TCP--DisConnect":
+                break
+            else:
+                self.ActionWithDic(recvDic)
+    def ActionWithDic(self, dic):
+        path = dic["path"]
+        if path == "packageIcon":
+            uuid = dic["uuid"]
+            icon = packageManager.packageIcon(uuid)
+            if len(icon) > 0:
+
+                baseDic = {"ContentType":"Image","ContentLength":str(len(icon))}
+                jsonStr = json.dumps(baseDic,separators=(',',':'))
+                header = KHeaderStr + jsonStr + kEndStr
+                self.request.sendall(header)
+                self.request.sendall(icon)
+            else:
+                baseDic = {"ContentLength":"0"}
+                jsonStr = json.dumps(baseDic,separators=(',',':'))
+                header = KHeaderStr + jsonStr + kEndStr
+                self.request.sendall(header)
+        elif path == "imageStream":
+            self.startSendVideoImage()
+    def startSendVideoImage(self):
+        while 1:
+            buf = self.getImageStr()
+            if len(buf) > 0:
+                baseDic = {"ContentType":"Image","ContentLength":str(len(buf))}
+                jsonStr = json.dumps(baseDic,separators=(',',':'))
+                header = KHeaderStr + jsonStr + kEndStr
+                self.request.sendall(header)
+                self.request.sendall(buf)
+    def getImageStr(self):
+        imageArr = videoProxy.getImageRemote(videoSubscriberID)
+        image = imageArr[6]
+        array=bytearray(image)
+        data=numpy.array(array)
+        data=data.reshape([imageArr[1],imageArr[0],3])
+        param = 95
+        if int(imageArr[0]) == 320:
+            param = 95
+        elif int(imageArr[0]) == 640:
+            param = 91
+        elif int(imageArr[0]) == 1280:
+            param = 60
+        buf = cv2.imencode('.jpg',data,[int(cv2.IMWRITE_JPEG_QUALITY), param])[1]
+        return buf
+
+
+class TcpServer(ThreadingTCPServer):
+    allow_reuse_address = True
+    def serve_forever(self):
+        self.stopped = False
+        while not self.stopped:
+            self.handle_request()
+        self.server_close()
+    def force_stop(self):
+        self.stopped = True
+        self.sendQUIT()
+    def sendQUIT(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect(self.server_address)
+            sock.sendall("QUIT")
+        finally:
+            sock.close()
+
+#######################################################################
+def getTCPPort(port):
+    global myTCPServer
+    currentPort = port
+    while True:
+        try:
+            myTCPServer = TcpServer(('', currentPort),MyTCPHandler)
+            break
+        except Exception as e:
+            currentPort += 1
+    return currentPort
+
+def stopTCPServer():
+    global myTCPServer
+    try:
+        myTCPServer.force_stop()
+    except Exception as e:
+        pass
+########################################################
+def json_loads_byteified(json_text):
+    return _byteify(
+        json.loads(json_text, object_hook=_byteify),
+        ignore_dicts=True
+    )
+
+def _byteify(data, ignore_dicts = False):
+    if isinstance(data, unicode):
+        return data.encode('utf-8')
+    if isinstance(data, list):
+        return [ _byteify(item, ignore_dicts=True) for item in data ]
+    if isinstance(data, dict) and not ignore_dicts:
+        return {
+            _byteify(key, ignore_dicts=True): _byteify(value, ignore_dicts=True)
+            for key, value in data.iteritems()
+        }
+    return data]]>
+</content>
+                                                </script>
+                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                                                <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
+                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
                                             </Box>
                                             <Link inputowner="2" indexofinput="2" outputowner="0" indexofoutput="1" />
                                         </Diagram>
