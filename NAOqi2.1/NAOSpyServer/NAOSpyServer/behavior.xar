@@ -1070,22 +1070,15 @@ import base64
 import threading
 import socket
 import sys
-import vision_definitions
-try:
-    import numpy
-    import cv2
-except Exception as e:
-    pass
+
 
 myTCPServer = None
 packageManager =  ALProxy("PackageManager")
 managerProxy = ALProxy("ALBehaviorManager")
-videoProxy= ALProxy("ALVideoDevice")
 
 KHeaderStr = "$$qishanshi$$"
 kEndStr = "\r\n"
 
-videoSubscriberID = ""
 
 class MyClass(GeneratedClass):
     def __init__(self):
@@ -1097,15 +1090,11 @@ class MyClass(GeneratedClass):
 
     def onUnload(self):
         stopTCPServer()
-        videoProxy.unsubscribe(videoSubscriberID)
+
 
     def onInput_onStart(self):
-        global myTCPServer,videoSubscriberID
+        global myTCPServer
         self.getParentTimeline().pause()
-
-        videoProxy.setParam(vision_definitions.kCameraSelectID,0)
-        subStr = "shiqishanspy"+str(time.time())
-        videoSubscriberID = videoProxy.subscribe(subStr, 3, 13, 25)
 
         port = getTCPPort(47355)
 
@@ -1147,32 +1136,9 @@ class MyTCPHandler(BaseRequestHandler):
                 jsonStr = json.dumps(baseDic,separators=(',',':'))
                 header = KHeaderStr + jsonStr + kEndStr
                 self.request.sendall(header)
-        elif path == "imageStream":
-            self.startSendVideoImage()
-    def startSendVideoImage(self):
-        while 1:
-            buf = self.getImageStr()
-            if len(buf) > 0:
-                baseDic = {"ContentType":"Image","ContentLength":str(len(buf))}
-                jsonStr = json.dumps(baseDic,separators=(',',':'))
-                header = KHeaderStr + jsonStr + kEndStr
-                self.request.sendall(header)
-                self.request.sendall(buf)
-    def getImageStr(self):
-        imageArr = videoProxy.getImageRemote(videoSubscriberID)
-        image = imageArr[6]
-        array=bytearray(image)
-        data=numpy.array(array)
-        data=data.reshape([imageArr[1],imageArr[0],3])
-        param = 95
-        if int(imageArr[0]) == 320:
-            param = 95
-        elif int(imageArr[0]) == 640:
-            param = 91
-        elif int(imageArr[0]) == 1280:
-            param = 60
-        buf = cv2.imencode('.jpg',data,[int(cv2.IMWRITE_JPEG_QUALITY), param])[1]
-        return buf
+        else:
+            pass
+
 
 
 class TcpServer(ThreadingTCPServer):
@@ -1242,7 +1208,7 @@ def _byteify(data, ignore_dicts = False):
                                 <BehaviorLayer name="UDPServer">
                                     <BehaviorKeyframe name="UDPServer" index="1">
                                         <Diagram>
-                                            <Box name="UDPServer" id="2" localization="8" tooltip="UDPServer" x="109" y="45">
+                                            <Box name="UDPServer" id="2" localization="8" tooltip="UDPServer" x="219" y="41">
                                                 <bitmap>media/images/box/box-python-script.png</bitmap>
                                                 <script language="4">
                                                     <content>
@@ -1253,7 +1219,7 @@ import base64
 import threading
 import socket
 import sys
-
+import time
 import vision_definitions
 try:
     import numpy
@@ -1262,10 +1228,14 @@ except Exception as e:
     pass
 
 myUDPServer = None
-packageManager =  ALProxy("PackageManager")
-managerProxy = ALProxy("ALBehaviorManager")
-videoProxy= ALProxy("ALVideoDevice")
+isConnected = True
 
+alVideo= ALProxy("ALVideoDevice")
+alMemory = ALProxy("ALMemory")
+alBehaviorManager = ALProxy("ALBehaviorManager")
+alMotion = ALProxy("ALMotion")
+alPosture = ALProxy("ALRobotPosture")
+alTts = ALProxy("ALTextToSpeech")
 videoSubscriberID = ""
 serverPort = 47351
 serverIP = ""
@@ -1275,6 +1245,9 @@ isRobotics = 0
 imageCount = 0
 bSendImage = False
 ncid = ""
+
+CPUTList = []
+bRecordingCPUT = True
 class MyClass(GeneratedClass):
     def __init__(self):
         GeneratedClass.__init__(self)
@@ -1289,26 +1262,53 @@ class MyClass(GeneratedClass):
             isRobotics = 0
 
     def onLoad(self):
-        pass
+        global bRecordingCPUT
+        bRecordingCPUT = True
 
     def onUnload(self):
-        self.logger.info("nimabi........")
+        global bRecordingCPUT,CPUTList
+
         stopUDPServer()
-        videoProxy.unsubscribe(videoSubscriberID)
+
+        bRecordingCPUT = False
+        CPUTList = []
+
+        alVideo.unsubscribe(videoSubscriberID)
     def onInput_onStart(self):
         global videoSubscriberID
         self.getParentTimeline().pause()
 
-        videoProxy.setParam(vision_definitions.kCameraSelectID,0)
+        alVideo.setParam(vision_definitions.kCameraSelectID,0)
         subStr = "shiqishanspy"+str(time.time())
-        videoSubscriberID = videoProxy.subscribe(subStr, 2, 13, 25)
+        videoSubscriberID = alVideo.subscribe(subStr, 2, 13, 25)
 
         startUDPServer()
 
+        #self.startRecordCPUT()
     def onInput_onStop(self):
         self.onUnload()
 
+    def startRecordCPUT(self):
+        global bRecordingCPUT
+        if not bRecordingCPUT:
+            bRecordingCPUT = True
+            t = threading.Thread(target=self.__class__.recordCPUT,args=(self))
+            t.setDaemon(True)
+            t.start()
+    def recordCPUT(self):
+        global CPUTList
+        while bRecordingCPUT:
+            cpuT = 0
+            try:
+                cpuT = alMemory.getData("Device/SubDeviceList/Head/Temperature/Sensor/Value")
+            except:
+                pass
+            CPUTList.append(cpuT)
+            if len(CPUTList) > 8:
+                del CPUTList[0:len(CPUTList)-7]
+            time.sleep(5.0)
 class MyUDPHandler(BaseRequestHandler):
+
     def handle(self):
         data = self.request[0].strip()
         sock = self.request[1]
@@ -1329,6 +1329,7 @@ class MyUDPHandler(BaseRequestHandler):
         self.ActionWithDic(recvDic,sock)
 
     def ActionWithDic(self, dic, sock):
+        global isConnected
         path = dic["path"]
         tag = dic["tag"]
         port = int(dic["recvPort"])
@@ -1337,16 +1338,37 @@ class MyUDPHandler(BaseRequestHandler):
         outputDic = {}
         if path == "NP--robots-online":
             outputDic = self.getOnlineDic(dic)
+        elif path == "NP--robots-connect":
+            isConnected = True
+            outputDic = {}
+        else:
+            if not isConnected:
+                return
+        if path == "NP--robots-disconnect":
+            isConnected = False
         elif path == "NP--image--start":
             self.startSendImage(self.client_address[0],port)
         elif path == "NP--image--stop":
             self.stopSendImage()
-
-        outputDic.update(baseDic)
-        try:
-            sock.sendto(json.dumps(outputDic,separators=(',',':')),self.client_address)
-        except Exception as e:
+        elif path == "NP--behavior-all":
+            outputDic = self.getBehaviorsDic()
+        elif path == "NP--settings-info":
+            outputDic = self.getSettingsDic(dic)
+        elif path == "NP--speech-setinfo":
+            outputDic = self.getSpeechSetDic(dic)
+        elif path == "NP--motion-walk":
+            self.setWalk(dic)
+        elif path == "NP--motion-head":
+            self.setHead(dic)
+        else:
             pass
+
+        if int(tag) == 1000 or int(tag) >= 10000000:
+            outputDic.update(baseDic)
+            try:
+                sock.sendto(json.dumps(outputDic,separators=(',',':')),self.client_address)
+            except Exception as e:
+                pass
     ####################################
     def getOnlineDic(self, dic):
         recvTime = dic["sendTime"]
@@ -1369,6 +1391,109 @@ class MyUDPHandler(BaseRequestHandler):
                 pass
         data = {"name":name,"version":version,"serverVersion":serverVersion,"isRobot":isRobotics,"battery":batteryCharge,"isSelected":0,"timediff":round(timediff,3)}
         return data
+
+    def getBehaviorsDic(self):
+        defaultList = alBehaviorManager.getDefaultBehaviors()
+        behaviorList = alBehaviorManager.getInstalledBehaviors()
+        runingList = alBehaviorManager.getRunningBehaviors()
+        behaviors = ""
+        for i in behaviorList:
+            if i.count(".currentChoregrapheBehavior"):
+                pass
+            elif i.count(".lastUploadedChoregrapheBehavior"):
+                pass
+            elif i.count("animation"):
+                pass
+            elif i.count("default"):
+                pass
+            elif i.count("boot-config"):
+                pass
+            elif i.count("diagnostic"):
+                pass
+            else:
+                isDefault = "N"
+                isRuning = "N"
+                if defaultList.count(i):
+                    isDefault = "Y"
+                if runingList.count(i):
+                    isRuning = "Y"
+                i += isDefault
+                i += isRuning
+                behaviors += i
+                behaviors += "$"
+                if len(behaviors) >7900:
+                    break
+        return {"behaviors":behaviors}
+    def getSettingsDic(self, dic):
+        robotName = "Simulator"
+        supportLanguage = ""
+        version = ""
+        isHighVersion = 0
+        volume = 0
+        stiffness = 0
+        cpuT = 0
+        charging = 0
+        charge = 0
+        autoLife = "disabled"
+        if(isRobotics == 1):
+            try:
+                audio = ALProxy("ALAudioDevice")
+                volume = audio.getOutputVolume()
+                info = alMotion.getStiffnesses("Body")
+                stiffness = info[0]
+            except :
+                volume = 0
+                stiffness = 0
+            try:
+                system = ALProxy("ALSystem")
+                isHighVersion = 1
+                robotName = system.robotName()
+                version = system.systemVersion()
+            except :
+                pass
+            try:
+                cpuT = self.memory.getData("Device/SubDeviceList/Head/Temperature/Sensor/Value")
+                if self.memory.getData("Device/SubDeviceList/Battery/Current/Sensor/Value") >0:
+                    charging = 1
+                charge =int(self.memory.getData("Device/SubDeviceList/Battery/Charge/Sensor/Value")*100)
+            except :
+                pass
+            try:
+                autonomousLife = ALProxy("ALAutonomousLife")
+                autoLife = autonomousLife.getState()
+            except :
+                pass
+        currentLanguage = alTts.getLanguage()
+        languageList = alTts.getAvailableLanguages()
+
+        for i in languageList:
+            supportLanguage += i
+            supportLanguage += "$"
+        data = {"currentLanguage":currentLanguage,"supportLanguage":supportLanguage,"isRobot":self.isRobotics,"name":robotName,"isHighVersion":isHighVersion,"stiffness":stiffness,"volume":volume,"CPUT":cpuT,"charging":charging,"charge":charge,"version":version,"autoLife":autoLife}
+        return data
+
+    def getSpeechSetDic(self, dic):
+        bodyMode = 0
+        try:
+            animSpeech = ALProxy('ALAnimatedSpeech')
+            bodyMode = animSpeech.getBodyLanguageMode()
+        except :
+            bodyMode = 0
+        supportLanguage = ""
+        volume = 0
+        if(isRobotics == 1):
+            try:
+                volume = alTts.getVolume()*100
+            except :
+                volume = 0
+        currentLanguage = alTts.getLanguage()
+        languageList = alTts.getAvailableLanguages()
+
+        for i in languageList:
+            supportLanguage += i
+            supportLanguage += "$"
+        data = {"currentLanguage":currentLanguage,"supportLanguage":supportLanguage,"volume":volume,"mode":bodyMode}
+        return data
     ##############################################
     def startSendImage(self, host, port):
         global bSendImage
@@ -1389,7 +1514,7 @@ class MyUDPHandler(BaseRequestHandler):
         global bSendImage
         bSendImage = False
     def getImageStr(self):
-        imageArr = videoProxy.getImageRemote(videoSubscriberID)
+        imageArr = alVideo.getImageRemote(videoSubscriberID)
         image = imageArr[6]
         array=bytearray(image)
         data=numpy.array(array)
@@ -1426,6 +1551,25 @@ class MyUDPHandler(BaseRequestHandler):
             data = {"header":sockSendHeader,"tag":"3000","count":str(count),"total":str(total),"image":str(sendStr),"imageCount":str(imageCount)}
             sock.sendto(json.dumps(data,separators=(',',':')),(host,port))
             count += 1
+    def setWalk(self, dic):
+        walkX = int(dic["x"])/10.0
+        walkY = int(dic["y"])/10.0
+        theta = int(dic["thera"])/10.0
+        frequency = int(dic["frequency"])/10.0
+        alMotion.setWalkTargetVelocity(walkX,walkY,theta,frequency)
+    def setHead(self, dic):
+        walkX = int(dic["x"])/10.0
+        walkY = int(dic["y"])/10.0
+        currentYaw = alMotion.getAngles("HeadYaw",False)
+        currentPitch = alMotion.getAngles("HeadPitch",False)
+        if(walkX>0 and currentPitch[0]<=0.326):
+            alMotion.changeAngles("HeadPitch",walkX,0.2)
+        elif(walkX<=0 and currentPitch[0]>=-0.445):
+            alMotion.changeAngles("HeadPitch",walkX,0.2)
+        if(walkY>0 and currentYaw[0]<=2.07):
+            alMotion.changeAngles("HeadYaw",walkY,0.2)
+        if(walkY<=0 and currentYaw[0]>=-2.07):
+            alMotion.changeAngles("HeadYaw",walkY,0.2)
 ##################################################
 class UdpServer(ThreadingUDPServer):
     allow_reuse_address = True
@@ -1456,6 +1600,8 @@ def stopUDPServer():
         myUDPServer.force_stop()
     except Exception as e:
         pass
+####################################################
+
 ########################################################
 def json_loads_byteified(json_text):
     return _byteify(
@@ -1479,8 +1625,6 @@ def _byteify(data, ignore_dicts = False):
                                                 <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
                                                 <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
                                                 <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
-                                                <Output name="startSendImage" type="3" type_size="2" nature="2" inner="0" tooltip="" id="4" />
-                                                <Output name="stopSendImage" type="1" type_size="1" nature="2" inner="0" tooltip="" id="5" />
                                             </Box>
                                             <Link inputowner="2" indexofinput="2" outputowner="0" indexofoutput="1" />
                                         </Diagram>
