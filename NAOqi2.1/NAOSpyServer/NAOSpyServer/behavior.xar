@@ -1245,6 +1245,7 @@ isRobotics = 0
 imageCount = 0
 bSendImage = False
 ncid = ""
+tags = []
 
 CPUTList = []
 bRecordingCPUT = True
@@ -1275,8 +1276,9 @@ class MyClass(GeneratedClass):
 
         alVideo.unsubscribe(videoSubscriberID)
     def onInput_onStart(self):
-        global videoSubscriberID
+        global videoSubscriberID,tags
         self.getParentTimeline().pause()
+        tags = []
 
         alVideo.setParam(vision_definitions.kCameraSelectID,0)
         subStr = "shiqishanspy"+str(time.time())
@@ -1326,49 +1328,76 @@ class MyUDPHandler(BaseRequestHandler):
                 #return
         except Exception as e:
             return
-        self.ActionWithDic(recvDic,sock)
 
-    def ActionWithDic(self, dic, sock):
-        global isConnected
+        method = recvDic["method"]
+        if method == "POST":
+            self.handlePOST(recvDic,sock)
+        else:
+            self.handleGET(recvDic,sock)
+
+    def sendResponseData(self, sock, data):
+        try:
+            sock.sendto(json.dumps(data,separators=(',',':')),self.client_address)
+        except Exception as e:
+            pass
+
+    def handleGET(self, dic, sock):
         path = dic["path"]
         tag = dic["tag"]
         port = int(dic["recvPort"])
         baseDic = {"tag":tag,"header":sockSendHeader}
-
         outputDic = {}
         if path == "NP--robots-online":
             outputDic = self.getOnlineDic(dic)
-        elif path == "NP--robots-connect":
-            isConnected = True
-            outputDic = {}
-        else:
-            if not isConnected:
-                return
-        if path == "NP--robots-disconnect":
-            isConnected = False
-        elif path == "NP--image--start":
-            self.startSendImage(self.client_address[0],port)
-        elif path == "NP--image--stop":
-            self.stopSendImage()
         elif path == "NP--behavior-all":
             outputDic = self.getBehaviorsDic()
         elif path == "NP--settings-info":
             outputDic = self.getSettingsDic(dic)
         elif path == "NP--speech-setinfo":
             outputDic = self.getSpeechSetDic(dic)
+        else:
+            pass
+        outputDic.update(baseDic)
+        self.sendResponseData(sock,outputDic)
+
+    def handlePOST(self, dic, sock):
+        global tags,ncid,isConnected
+        path = dic["path"]
+        tag = dic["tag"]
+        port = int(dic["recvPort"])
+        baseDic = {"tag":tag,"header":sockSendHeader}
+
+        newNcid = dic["ncid"]
+        if ncid != newNcid:
+            tags = []
+            ncid = newNcid
+
+        if int(tag) >= 10000000:
+            if tags.count(tag) >=1:
+                self.sendResponseData(sock,baseDic)
+                return
+            self.sendResponseData(sock,baseDic)
+            tags.append(tag)
+
+        if path == "NP--robots-connect":
+            isConnected = True
+        elif path == "NP--robots-disconnect":
+            isConnected = False
+        elif path == "NP--image--start":
+            self.startSendImage(self.client_address[0],port)
+        elif path == "NP--image--stop":
+            self.stopSendImage()
         elif path == "NP--motion-walk":
             self.setWalk(dic)
         elif path == "NP--motion-head":
             self.setHead(dic)
+        elif path == "NP--motion-posture":
+            self.setPosture(dic)
         else:
             pass
 
-        if int(tag) == 1000 or int(tag) >= 10000000:
-            outputDic.update(baseDic)
-            try:
-                sock.sendto(json.dumps(outputDic,separators=(',',':')),self.client_address)
-            except Exception as e:
-                pass
+
+
     ####################################
     def getOnlineDic(self, dic):
         recvTime = dic["sendTime"]
@@ -1570,6 +1599,10 @@ class MyUDPHandler(BaseRequestHandler):
             alMotion.changeAngles("HeadYaw",walkY,0.2)
         if(walkY<=0 and currentYaw[0]>=-2.07):
             alMotion.changeAngles("HeadYaw",walkY,0.2)
+    def setPosture(self, dic):
+        posture = dic["posture"]
+        alPosture.setMaxTryNumber(2)
+        alPosture.goToPosture(posture,0.7)
 ##################################################
 class UdpServer(ThreadingUDPServer):
     allow_reuse_address = True
