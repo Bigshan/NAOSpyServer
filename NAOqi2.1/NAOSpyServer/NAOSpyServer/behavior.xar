@@ -1236,6 +1236,11 @@ alBehaviorManager = ALProxy("ALBehaviorManager")
 alMotion = ALProxy("ALMotion")
 alPosture = ALProxy("ALRobotPosture")
 alTts = ALProxy("ALTextToSpeech")
+try:
+    alSpeech = ALProxy('ALAnimatedSpeech')
+except Exception as e:
+    alSpeech = ALProxy('ALTextToSpeech')
+
 videoSubscriberID = ""
 serverPort = 47351
 serverIP = ""
@@ -1246,6 +1251,7 @@ imageCount = 0
 bSendImage = False
 ncid = ""
 tags = []
+speechIds = []
 
 CPUTList = []
 bRecordingCPUT = True
@@ -1263,8 +1269,9 @@ class MyClass(GeneratedClass):
             isRobotics = 0
 
     def onLoad(self):
-        global bRecordingCPUT
+        global bRecordingCPUT,speechIds
         bRecordingCPUT = True
+        speechIds = []
 
     def onUnload(self):
         global bRecordingCPUT,CPUTList
@@ -1275,6 +1282,13 @@ class MyClass(GeneratedClass):
         CPUTList = []
 
         alVideo.unsubscribe(videoSubscriberID)
+
+        for id in speechIds:
+            try:
+                alSpeech.stop(id)
+            except:
+                pass
+
     def onInput_onStart(self):
         global videoSubscriberID,tags
         self.getParentTimeline().pause()
@@ -1284,9 +1298,12 @@ class MyClass(GeneratedClass):
         subStr = "shiqishanspy"+str(time.time())
         videoSubscriberID = alVideo.subscribe(subStr, 2, 13, 25)
 
+
         startUDPServer()
 
         #self.startRecordCPUT()
+    def say(self):
+        alSpeech.say(str("hahaha"))
     def onInput_onStop(self):
         self.onUnload()
 
@@ -1393,6 +1410,8 @@ class MyUDPHandler(BaseRequestHandler):
             self.setHead(dic)
         elif path == "NP--motion-posture":
             self.setPosture(dic)
+        elif path == "NP--speech-speech":
+            self.speechText(dic)
         else:
             pass
 
@@ -1431,8 +1450,8 @@ class MyUDPHandler(BaseRequestHandler):
                 pass
             elif i.count(".lastUploadedChoregrapheBehavior"):
                 pass
-            elif i.count("animation"):
-                pass
+            #elif i.count("animation"):
+                #pass
             elif i.count("default"):
                 pass
             elif i.count("boot-config"):
@@ -1450,7 +1469,7 @@ class MyUDPHandler(BaseRequestHandler):
                 i += isRuning
                 behaviors += i
                 behaviors += "$"
-                if len(behaviors) >7900:
+                if len(behaviors) > 60000:
                     break
         return {"behaviors":behaviors}
     def getSettingsDic(self, dic):
@@ -1603,6 +1622,17 @@ class MyUDPHandler(BaseRequestHandler):
         posture = dic["posture"]
         alPosture.setMaxTryNumber(2)
         alPosture.goToPosture(posture,0.7)
+    def speechText(self, dic):
+        global speechIds
+        message = dic["message"]
+        sentence = "\RSPD="+ str( 100 ) + "\ "
+        sentence += "\VCT="+ str( 100 ) + "\ "
+        sentence += str(message)
+        sentence +=  "\RST\ "
+        id = alSpeech.post.say(str(sentence))
+        speechIds.append(id)
+        alSpeech.wait(id, 0)
+
 ##################################################
 class UdpServer(ThreadingUDPServer):
     allow_reuse_address = True
