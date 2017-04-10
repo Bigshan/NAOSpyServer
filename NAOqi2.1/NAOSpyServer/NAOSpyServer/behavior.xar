@@ -1357,7 +1357,7 @@ class MyUDPHandler(BaseRequestHandler):
             sock.sendto(json.dumps(data,separators=(',',':')),self.client_address)
         except Exception as e:
             pass
-
+    ## GET ###
     def handleGET(self, dic, sock):
         path = dic["path"]
         tag = dic["tag"]
@@ -1372,11 +1372,13 @@ class MyUDPHandler(BaseRequestHandler):
             outputDic = self.getSettingsDic(dic)
         elif path == "NP--speech-setinfo":
             outputDic = self.getSpeechSetDic(dic)
+        elif path == "NP--speech-animations":
+            outputDic = self.getSpeechAnimationsDic(dic)
         else:
             pass
         outputDic.update(baseDic)
         self.sendResponseData(sock,outputDic)
-
+    ## POST ###
     def handlePOST(self, dic, sock):
         global tags,ncid,isConnected
         path = dic["path"]
@@ -1542,6 +1544,16 @@ class MyUDPHandler(BaseRequestHandler):
             supportLanguage += "$"
         data = {"currentLanguage":currentLanguage,"supportLanguage":supportLanguage,"volume":volume,"mode":bodyMode}
         return data
+    def getSpeechAnimationsDic(self, dic):
+        behaviorList = alBehaviorManager.getInstalledBehaviors()
+        animations = ""
+        for i in behaviorList:
+            if i.startswith("animations/"):
+                animations += i
+                animations += "$"
+                if len(animations) > 60000:
+                    break
+        return {"animations":animations}
     ##############################################
     def startSendImage(self, host, port):
         global bSendImage
