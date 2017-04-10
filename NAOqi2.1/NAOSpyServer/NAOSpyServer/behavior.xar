@@ -1583,10 +1583,12 @@ class MyUDPHandler(BaseRequestHandler):
         if int(imageArr[0]) == 320:
             param = 95
         elif int(imageArr[0]) == 640:
-            param = 91
+            param = 90
         elif int(imageArr[0]) == 1280:
             param = 60
         buf = cv2.imencode('.jpg',data,[int(cv2.IMWRITE_JPEG_QUALITY), param])[1]
+
+        #return buf
         return base64.b64encode(buf)
 
     def sendImageData(self, sock, host, port):
@@ -1608,8 +1610,9 @@ class MyUDPHandler(BaseRequestHandler):
             else:
                 sendStr = imageStr[sum:sum+piceSize]
                 sum += piceSize
-            data = {"header":sockSendHeader,"tag":"3000","count":str(count),"total":str(total),"image":str(sendStr),"imageCount":str(imageCount)}
-            sock.sendto(json.dumps(data,separators=(',',':')),(host,port))
+            #data = {"header":sockSendHeader,"tag":"3000","count":str(count),"total":str(total),"image":str(sendStr),"imageCount":str(imageCount)}
+            data = "3000" + "$$" + str(count) + "$$" + str(total) + "$$" + str(imageCount) + "$$" + str(sendStr)
+            sock.sendto(data,(host,port))
             count += 1
     def setWalk(self, dic):
         walkX = int(dic["x"])/10.0
