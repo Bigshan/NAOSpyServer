@@ -1230,7 +1230,7 @@ except Exception as e:
 myUDPServer = None
 isConnected = True
 
-alVideo= ALProxy("ALVideoDevice")
+alVideo = ALProxy("ALVideoDevice")
 alMemory = ALProxy("ALMemory")
 alBehaviorManager = ALProxy("ALBehaviorManager")
 alMotion = ALProxy("ALMotion")
@@ -1406,6 +1406,10 @@ class MyUDPHandler(BaseRequestHandler):
             self.startSendImage(self.client_address[0],port)
         elif path == "NP--image--stop":
             self.stopSendImage()
+        elif path == "NP--image--changeIndex":
+            self.changeCameraIndex(dic)
+        elif path == "NP--image--changeResolution":
+            self.changeCameraResolution(dic)
         elif path == "NP--motion-walk":
             self.setWalk(dic)
         elif path == "NP--motion-head":
@@ -1419,7 +1423,7 @@ class MyUDPHandler(BaseRequestHandler):
 
 
 
-    ####################################
+    ###GET ##############################
     def getOnlineDic(self, dic):
         recvTime = dic["sendTime"]
         timediff = time.time()-float(recvTime)
@@ -1452,8 +1456,6 @@ class MyUDPHandler(BaseRequestHandler):
                 pass
             elif i.count(".lastUploadedChoregrapheBehavior"):
                 pass
-            #elif i.count("animation"):
-                #pass
             elif i.count("default"):
                 pass
             elif i.count("boot-config"):
@@ -1554,7 +1556,7 @@ class MyUDPHandler(BaseRequestHandler):
                 if len(animations) > 60000:
                     break
         return {"animations":animations}
-    ##############################################
+    ###POST  #########################################
     def startSendImage(self, host, port):
         global bSendImage
         if not bSendImage:
@@ -1580,20 +1582,24 @@ class MyUDPHandler(BaseRequestHandler):
         data=numpy.array(array)
         data=data.reshape([imageArr[1],imageArr[0],3])
         param = 95
-        if int(imageArr[0]) == 320:
+        resolution = 0
+        if int(imageArr[1]) == 240:
             param = 95
-        elif int(imageArr[0]) == 640:
+            resolution = 1
+        elif int(imageArr[1]) == 480:
             param = 90
-        elif int(imageArr[0]) == 1280:
+            resolution = 2
+        elif int(imageArr[1]) == 960:
             param = 60
+            resolution = 3
         buf = cv2.imencode('.jpg',data,[int(cv2.IMWRITE_JPEG_QUALITY), param])[1]
 
         #return buf
-        return base64.b64encode(buf)
+        return (resolution,imageArr[7],base64.b64encode(buf))
 
     def sendImageData(self, sock, host, port):
         global imageCount
-        imageStr = self.getImageStr()
+        (resolution,cameraIndex,imageStr) = self.getImageStr()
         if imageCount > 900000:
             imageCount = 0
         imageCount += 1
@@ -1610,10 +1616,25 @@ class MyUDPHandler(BaseRequestHandler):
             else:
                 sendStr = imageStr[sum:sum+piceSize]
                 sum += piceSize
-            #data = {"header":sockSendHeader,"tag":"3000","count":str(count),"total":str(total),"image":str(sendStr),"imageCount":str(imageCount)}
-            data = "3000" + "$$" + str(count) + "$$" + str(total) + "$$" + str(imageCount) + "$$" + str(sendStr)
+            data = "3000" + "$$" + str(resolution) + "$$"+ str(cameraIndex) + "$$" + str(count) + "$$" + str(total) + "$$" + str(imageCount) + "$$" + str(sendStr)
             sock.sendto(data,(host,port))
             count += 1
+    def changeCameraIndex(self, dic):
+        index = dic["index"]
+        id = 0
+        if index == "Bottom":
+            id = 1
+        alVideo.setActiveCamera(id)
+    def changeCameraResolution(self, dic):
+        resolution = dic["resolution"]
+        value = 0
+        if resolution == "240P":
+            value = 1
+        elif resolution == "480P":
+            value = 2
+        elif resolution == "960P":
+            value = 3
+        alVideo.setResolution(videoSubscriberID,value)
     def setWalk(self, dic):
         walkX = int(dic["x"])/10.0
         walkY = int(dic["y"])/10.0
