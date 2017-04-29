@@ -1085,6 +1085,7 @@ class MyClass(GeneratedClass):
         GeneratedClass.__init__(self)
         reload(sys)
         sys.setdefaultencoding('utf-8')
+        self.memory = ALProxy("ALMemory")
     def onLoad(self):
         pass
 
@@ -1097,7 +1098,7 @@ class MyClass(GeneratedClass):
         self.getParentTimeline().pause()
 
         port = getTCPPort(47355)
-
+        self.memory.insertData("NAOSPY_TCPPORT",port)
         self.logger.info("TCP Server Port:%d",port)
 
         myTCPServer.serve_forever()
@@ -1208,7 +1209,7 @@ def _byteify(data, ignore_dicts = False):
                                 <BehaviorLayer name="UDPServer">
                                     <BehaviorKeyframe name="UDPServer" index="1">
                                         <Diagram>
-                                            <Box name="UDPServer" id="2" localization="8" tooltip="UDPServer" x="219" y="41">
+                                            <Box name="UDPServer" id="2" localization="8" tooltip="UDPServer" x="414" y="257">
                                                 <bitmap>media/images/box/box-python-script.png</bitmap>
                                                 <script language="4">
                                                     <content>
@@ -1253,8 +1254,6 @@ ncid = ""
 tags = []
 speechIds = []
 
-CPUTList = []
-bRecordingCPUT = True
 class MyClass(GeneratedClass):
     def __init__(self):
         GeneratedClass.__init__(self)
@@ -1269,17 +1268,12 @@ class MyClass(GeneratedClass):
             isRobotics = 0
 
     def onLoad(self):
-        global bRecordingCPUT,speechIds
-        bRecordingCPUT = True
+        global speechIds
         speechIds = []
 
     def onUnload(self):
-        global bRecordingCPUT,CPUTList
 
         stopUDPServer()
-
-        bRecordingCPUT = False
-        CPUTList = []
 
         alVideo.unsubscribe(videoSubscriberID)
 
@@ -1301,31 +1295,11 @@ class MyClass(GeneratedClass):
 
         startUDPServer()
 
-        #self.startRecordCPUT()
     def say(self):
         alSpeech.say(str("hahaha"))
     def onInput_onStop(self):
         self.onUnload()
 
-    def startRecordCPUT(self):
-        global bRecordingCPUT
-        if not bRecordingCPUT:
-            bRecordingCPUT = True
-            t = threading.Thread(target=self.__class__.recordCPUT,args=(self))
-            t.setDaemon(True)
-            t.start()
-    def recordCPUT(self):
-        global CPUTList
-        while bRecordingCPUT:
-            cpuT = 0
-            try:
-                cpuT = alMemory.getData("Device/SubDeviceList/Head/Temperature/Sensor/Value")
-            except:
-                pass
-            CPUTList.append(cpuT)
-            if len(CPUTList) > 8:
-                del CPUTList[0:len(CPUTList)-7]
-            time.sleep(5.0)
 class MyUDPHandler(BaseRequestHandler):
 
     def handle(self):
@@ -1339,10 +1313,22 @@ class MyUDPHandler(BaseRequestHandler):
         try:
             header = recvDic["header"]
             targets = recvDic["targets"]
+
             if not header == sockRecvHeader:
                 return
-            #if not (targets.count(serverIP) or targets.count("ALL") ):
-                #return
+
+            isLegal = False
+            if targets.count("ALL"):
+                isLegal = True
+            if recvDic.has_key("robotIP"):
+                isLegal = True
+            if len(serverIP) > 1 and targets.count(serverIP):
+                isLegal = True
+
+            if not isLegal:
+                return
+
+
         except Exception as e:
             return
 
@@ -1375,12 +1361,12 @@ class MyUDPHandler(BaseRequestHandler):
         elif path == "NP--speech-animations":
             outputDic = self.getSpeechAnimationsDic(dic)
         else:
-            pass
+            return
         outputDic.update(baseDic)
         self.sendResponseData(sock,outputDic)
     ## POST ###
     def handlePOST(self, dic, sock):
-        global tags,ncid,isConnected
+        global tags,ncid,isConnected,serverIP
         path = dic["path"]
         tag = dic["tag"]
         port = int(dic["recvPort"])
@@ -1400,6 +1386,7 @@ class MyUDPHandler(BaseRequestHandler):
 
         if path == "NP--robots-connect":
             isConnected = True
+            serverIP = dic["robotIP"]
         elif path == "NP--robots-disconnect":
             isConnected = False
         elif path == "NP--image--start":
@@ -1425,12 +1412,9 @@ class MyUDPHandler(BaseRequestHandler):
 
     ###GET ##############################
     def getOnlineDic(self, dic):
-        recvTime = dic["sendTime"]
-        timediff = time.time()-float(recvTime)
         name = "Simulator"
         version = ""
-        serverVersion = 36
-        batteryCharge = 0
+        serverVersion = 20
         if(isRobotics == 1):
             try:
                 system = ALProxy("ALSystem")
@@ -1438,12 +1422,8 @@ class MyUDPHandler(BaseRequestHandler):
                 version = system.systemVersion()
             except :
                 pass
-            try:
-                battery = ALProxy("ALBattery")
-                batteryCharge = battery.getBatteryCharge()
-            except :
-                pass
-        data = {"name":name,"version":version,"serverVersion":serverVersion,"isRobot":isRobotics,"battery":batteryCharge,"isSelected":0,"timediff":round(timediff,3)}
+        tcpPort = alMemory.getData("NAOSPY_TCPPORT")
+        data = {"name":name,"version":version,"serverVersion":serverVersion,"isRobot":isRobotics,"tcpPort":tcpPort}
         return data
 
     def getBehaviorsDic(self):
@@ -1504,10 +1484,10 @@ class MyUDPHandler(BaseRequestHandler):
             except :
                 pass
             try:
-                cpuT = self.memory.getData("Device/SubDeviceList/Head/Temperature/Sensor/Value")
-                if self.memory.getData("Device/SubDeviceList/Battery/Current/Sensor/Value") >0:
+                cpuT = alMemory.getData("Device/SubDeviceList/Head/Temperature/Sensor/Value")
+                if alMemory.getData("Device/SubDeviceList/Battery/Current/Sensor/Value") >0:
                     charging = 1
-                charge =int(self.memory.getData("Device/SubDeviceList/Battery/Charge/Sensor/Value")*100)
+                charge =int(alMemory.getData("Device/SubDeviceList/Battery/Charge/Sensor/Value")*100)
             except :
                 pass
             try:
@@ -1521,7 +1501,7 @@ class MyUDPHandler(BaseRequestHandler):
         for i in languageList:
             supportLanguage += i
             supportLanguage += "$"
-        data = {"currentLanguage":currentLanguage,"supportLanguage":supportLanguage,"isRobot":self.isRobotics,"name":robotName,"isHighVersion":isHighVersion,"stiffness":stiffness,"volume":volume,"CPUT":cpuT,"charging":charging,"charge":charge,"version":version,"autoLife":autoLife}
+        data = {"currentLanguage":currentLanguage,"supportLanguage":supportLanguage,"name":robotName,"isHighVersion":isHighVersion,"stiffness":stiffness,"audioVolume":volume,"CPUT":cpuT,"charging":charging,"charge":charge,"version":version,"autoLife":autoLife}
         return data
 
     def getSpeechSetDic(self, dic):
