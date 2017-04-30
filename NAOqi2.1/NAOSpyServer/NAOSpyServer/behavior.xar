@@ -1245,6 +1245,7 @@ except Exception as e:
 videoSubscriberID = ""
 serverPort = 47351
 serverIP = ""
+videoConnectedHost = ""
 sockRecvHeader = "NAOSpy-hsukanbgdo"
 sockSendHeader = "NAOSpy-shsuammsoxo"
 isRobotics = 0
@@ -1348,7 +1349,7 @@ class MyUDPHandler(BaseRequestHandler):
         path = dic["path"]
         tag = dic["tag"]
         port = int(dic["recvPort"])
-        baseDic = {"tag":tag,"header":sockSendHeader}
+        baseDic = {"tag":tag,"header":sockSendHeader,"statusCode":0,"statusMessage":"OK"}
         outputDic = {}
         if path == "NP--robots-online":
             outputDic = self.getOnlineDic(dic)
@@ -1370,7 +1371,7 @@ class MyUDPHandler(BaseRequestHandler):
         path = dic["path"]
         tag = dic["tag"]
         port = int(dic["recvPort"])
-        baseDic = {"tag":tag,"header":sockSendHeader}
+        baseDic = {"tag":tag,"header":sockSendHeader,"statusCode":0,"statusMessage":"OK"}
 
         newNcid = dic["ncid"]
         if ncid != newNcid:
@@ -1381,18 +1382,28 @@ class MyUDPHandler(BaseRequestHandler):
             if tags.count(tag) >=1:
                 self.sendResponseData(sock,baseDic)
                 return
-            self.sendResponseData(sock,baseDic)
-            tags.append(tag)
 
+        outputDic = {}
         if path == "NP--robots-connect":
             isConnected = True
             serverIP = dic["robotIP"]
         elif path == "NP--robots-disconnect":
             isConnected = False
         elif path == "NP--image--start":
-            self.startSendImage(self.client_address[0],port)
+            global videoConnectedHost
+            clientHost = self.client_address[0]
+            if len(videoConnectedHost) > 0:
+                if videoConnectedHost != clientHost:
+                    outputDic = {"statusCode":40,"statusMessage":"USED"}
+            else:
+                videoConnectedHost = clientHost
+                self.startSendImage(clientHost,port)
+
         elif path == "NP--image--stop":
-            self.stopSendImage()
+            global videoConnectedHost
+            if videoConnectedHost == self.client_address[0]:
+                self.stopSendImage()
+                videoConnectedHost = ""
         elif path == "NP--image--changeIndex":
             self.changeCameraIndex(dic)
         elif path == "NP--image--changeResolution":
@@ -1408,6 +1419,9 @@ class MyUDPHandler(BaseRequestHandler):
         else:
             pass
 
+        outputDic.update(baseDic)
+        self.sendResponseData(sock,outputDic)
+        tags.append(tag)
 
 
     ###GET ##############################
