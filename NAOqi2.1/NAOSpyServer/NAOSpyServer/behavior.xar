@@ -1273,6 +1273,8 @@ class MyClass(GeneratedClass):
         speechIds = []
 
     def onUnload(self):
+        global bSendImage
+        bSendImage = False
 
         stopUDPServer()
 
@@ -1327,6 +1329,7 @@ class MyUDPHandler(BaseRequestHandler):
                 isLegal = True
 
             if not isLegal:
+                self.sendResponseData(sock,{"tag":recvDic["tag"],"header":sockSendHeader,"statusCode":40,"statusMessage":"Connection has been reset"})
                 return
 
 
@@ -1363,13 +1366,15 @@ class MyUDPHandler(BaseRequestHandler):
             outputDic = self.getSpeechAnimationsDic(dic)
         else:
             return
-        outputDic.update(baseDic)
-        self.sendResponseData(sock,outputDic)
+
+        baseDic.update(outputDic)
+        self.sendResponseData(sock,baseDic)
     ## POST ###
     def handlePOST(self, dic, sock):
         global tags,ncid,isConnected,serverIP
         path = dic["path"]
         tag = dic["tag"]
+        tagStr = self.client_address[0] + str(tag)
         port = int(dic["recvPort"])
         baseDic = {"tag":tag,"header":sockSendHeader,"statusCode":0,"statusMessage":"OK"}
 
@@ -1379,9 +1384,10 @@ class MyUDPHandler(BaseRequestHandler):
             ncid = newNcid
 
         if int(tag) >= 10000000:
-            if tags.count(tag) >=1:
+            if tags.count(tagStr) >=1:
                 self.sendResponseData(sock,baseDic)
                 return
+        tags.append(tagStr)
 
         outputDic = {}
         if path == "NP--robots-connect":
@@ -1394,7 +1400,7 @@ class MyUDPHandler(BaseRequestHandler):
             clientHost = self.client_address[0]
             if len(videoConnectedHost) > 0:
                 if videoConnectedHost != clientHost:
-                    outputDic = {"statusCode":40,"statusMessage":"USED"}
+                    outputDic = {"statusCode":50,"statusMessage":"Camera has been occupied by other devices"}
             else:
                 videoConnectedHost = clientHost
                 self.startSendImage(clientHost,port)
@@ -1419,10 +1425,8 @@ class MyUDPHandler(BaseRequestHandler):
         else:
             pass
 
-        outputDic.update(baseDic)
-        self.sendResponseData(sock,outputDic)
-        tags.append(tag)
-
+        baseDic.update(outputDic)
+        self.sendResponseData(sock,baseDic)
 
     ###GET ##############################
     def getOnlineDic(self, dic):
