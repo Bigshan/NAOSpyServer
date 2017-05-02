@@ -1209,7 +1209,7 @@ def _byteify(data, ignore_dicts = False):
                                 <BehaviorLayer name="UDPServer">
                                     <BehaviorKeyframe name="UDPServer" index="1">
                                         <Diagram>
-                                            <Box name="UDPServer" id="2" localization="8" tooltip="UDPServer" x="414" y="257">
+                                            <Box name="UDPServer" id="2" localization="8" tooltip="UDPServer" x="276" y="77">
                                                 <bitmap>media/images/box/box-python-script.png</bitmap>
                                                 <script language="4">
                                                     <content>
@@ -1229,7 +1229,8 @@ except Exception as e:
     pass
 
 myUDPServer = None
-isConnected = True
+
+connectedAddress = []
 
 alVideo = ALProxy("ALVideoDevice")
 alMemory = ALProxy("ALMemory")
@@ -1254,6 +1255,8 @@ bSendImage = False
 ncid = ""
 tags = []
 speechIds = []
+
+notiSeparatorStr = "$*$"
 
 class MyClass(GeneratedClass):
     def __init__(self):
@@ -1298,10 +1301,44 @@ class MyClass(GeneratedClass):
 
         startUDPServer()
 
-    def say(self):
-        alSpeech.say(str("hahaha"))
+
     def onInput_onStop(self):
         self.onUnload()
+
+    def sendNotification(self, p):
+        self.logger.info("noti....%d,%s",len(connectedAddress),connectedAddress)
+        if len(connectedAddress) == 0:
+            return
+
+        sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        try:
+            for address in connectedAddress:
+                sock.sendto(p,address)
+        except Exception as e:
+            self.logger.info("Super NAO send notification..:%s error..%s",p,e)
+        finally:
+            sock.close()
+
+    def onInput_sendBehaviorNotification(self, p):
+
+        runingBehaviors = ""
+        for i in p:
+            if i.count(".currentChoregrapheBehavior"):
+                pass
+            elif i.count(".lastUploadedChoregrapheBehavior"):
+                pass
+            elif i.count("default"):
+                pass
+            elif i.count("boot-config"):
+                pass
+            elif i.count("diagnostic"):
+                pass
+            else:
+                runingBehaviors += i
+                runingBehaviors += "$"
+
+        data = "4000" + notiSeparatorStr + runingBehaviors
+        self.sendNotification(data)
 
 class MyUDPHandler(BaseRequestHandler):
 
@@ -1371,7 +1408,7 @@ class MyUDPHandler(BaseRequestHandler):
         self.sendResponseData(sock,baseDic)
     ## POST ###
     def handlePOST(self, dic, sock):
-        global tags,ncid,isConnected,serverIP
+        global tags,ncid
         path = dic["path"]
         tag = dic["tag"]
         tagStr = self.client_address[0] + str(tag)
@@ -1391,10 +1428,18 @@ class MyUDPHandler(BaseRequestHandler):
 
         outputDic = {}
         if path == "NP--robots-connect":
-            isConnected = True
+            global serverIP,connectedAddress
             serverIP = dic["robotIP"]
+            recvPort = int(dic["recvPort"])
+            address = (self.client_address[0],recvPort)
+            if not connectedAddress.count(address):
+                connectedAddress.append(address)
         elif path == "NP--robots-disconnect":
-            isConnected = False
+            global connectedAddress
+            recvPort = int(dic["recvPort"])
+            address = (self.client_address[0],recvPort)
+            if connectedAddress.count(address):
+                connectedAddress.remove(address)
         elif path == "NP--image--start":
             global videoConnectedHost
             clientHost = self.client_address[0]
@@ -1418,6 +1463,8 @@ class MyUDPHandler(BaseRequestHandler):
             self.setWalk(dic)
         elif path == "NP--motion-head":
             self.setHead(dic)
+        elif path == "NP--motion-stiffness":
+            self.setStiffness(dic)
         elif path == "NP--motion-posture":
             self.setPosture(dic)
         elif path == "NP--speech-speech":
@@ -1614,7 +1661,7 @@ class MyUDPHandler(BaseRequestHandler):
             else:
                 sendStr = imageStr[sum:sum+piceSize]
                 sum += piceSize
-            data = "3000" + "$$" + str(resolution) + "$$"+ str(cameraIndex) + "$$" + str(count) + "$$" + str(total) + "$$" + str(imageCount) + "$$" + str(sendStr)
+            data = "3000" + notiSeparatorStr + str(resolution) + notiSeparatorStr + str(cameraIndex) + notiSeparatorStr + str(count) + notiSeparatorStr + str(total) + notiSeparatorStr + str(imageCount) + notiSeparatorStr + str(sendStr)
             sock.sendto(data,(host,port))
             count += 1
     def changeCameraIndex(self, dic):
@@ -1656,6 +1703,9 @@ class MyUDPHandler(BaseRequestHandler):
         posture = dic["posture"]
         alPosture.setMaxTryNumber(2)
         alPosture.goToPosture(posture,0.7)
+    def setStiffness(self, dic):
+        value = float(dic["value"])/1.0
+        alMotion.post.stiffnessInterpolation("Body",value, 0.2)
     def speechText(self, dic):
         global speechIds
         message = dic["message"]
@@ -1697,7 +1747,6 @@ def stopUDPServer():
         myUDPServer.force_stop()
     except Exception as e:
         pass
-####################################################
 
 ########################################################
 def json_loads_byteified(json_text):
@@ -1721,9 +1770,88 @@ def _byteify(data, ignore_dicts = False):
                                                 </script>
                                                 <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
                                                 <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" />
-                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" />
+                                                <Input name="sendBehaviorNotification" type="0" type_size="1" nature="1" inner="0" tooltip="" id="3" />
+                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="4" />
+                                            </Box>
+                                            <Box name="Subscribe to Event" id="5" localization="8" tooltip="Subscribes to a signal on a NAOqi2 service, or an event in NAOqi&apos;s shared memory&#x0A;When subscribed, the output will be triggered every time the signal is emitted or the event is raised." x="112" y="125">
+                                                <bitmap>media/images/box/sensors/STM.png</bitmap>
+                                                <script language="4">
+                                                    <content>
+                                                        <![CDATA[class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+        pass
+
+    def onLoad(self):
+        import threading
+        self.lock = threading.RLock()
+        self.signal = None
+        self.linkId = -1
+
+    def onUnload(self):
+        with self.lock:
+            self.unsubscribe()
+
+    def onInput_onStart(self):
+        with self.lock:
+            self.unsubscribe()
+            event = self.getParameter("event")
+
+            if(len(event) == 0):
+                return
+
+            params = event.split(".")
+            if(len(params) == 2):
+                try:
+                    self.signal = getattr(self.session().service(params[0]), params[1])
+                except Exception as e:
+                    mem = self.session().service("ALMemory")
+                    if(event in mem.getEventList()):
+                        self.signal = mem.subscriber(event).signal
+                    else:
+                        return
+            else:
+                try:
+                    self.signal = self.session().service("ALMemory").subscriber(event).signal
+                    self.linkId = self.signal.connect(self.reemitSignal)
+                except Exception as e:
+                    pass
+
+
+
+    def onInput_onStop(self):
+        with self.lock:
+            self.unsubscribe()
+            self.onStopped()
+
+    def unsubscribe(self):
+        if(self.signal is not None and self.linkId != -1):
+            self.signal.disconnect(self.linkId)
+
+        del self.signal
+        self.signal = None
+        self.linkId = -1
+
+    def reemitSignal(self, *args):
+        if(len(args) == 0):
+            self.onEvent()
+        elif(len(args) == 1):
+            self.onEvent(args[0])
+        else:
+            self.onEvent(args)]]>
+</content>
+                                                </script>
+                                                <Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" />
+                                                <Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="When this input is activated, the box will try to subscribe to the signal or the event passed in the box parameter.&#x0A;&#x0A;If it is retriggered and the parameter has changed, the box will undo the previous subscription and subscribe to the new signal or the new event." id="2" />
+                                                <Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Stop the box and cancel the subscription, if any." id="3" />
+                                                <Output name="onEvent" type="0" type_size="1" nature="2" inner="0" tooltip="This output is triggered each time the signal/event to which the box is connected is emitted/raised. It will carry the payload associated with the signal emission/event raise." id="4" />
+                                                <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when box behavior is finished." id="5" />
+                                                <Output name="onError" type="3" type_size="1" nature="1" inner="0" tooltip="This output is triggered when the box encounters an error, and contains the error message." id="6" />
+                                                <Parameter name="event" inherits_from_parent="0" content_type="3" value="BehaviorsRun" default_value="" custom_choice="0" tooltip='This parameter describes the signal to connect to, and the service advertising this signal.&#x0A;&#x0A;Use the pattern &quot;Service.Signal&quot; to connect to a signal, or the event key to connect to an event.' id="7" />
                                             </Box>
                                             <Link inputowner="2" indexofinput="2" outputowner="0" indexofoutput="1" />
+                                            <Link inputowner="5" indexofinput="2" outputowner="0" indexofoutput="1" />
+                                            <Link inputowner="2" indexofinput="3" outputowner="5" indexofoutput="4" />
                                         </Diagram>
                                     </BehaviorKeyframe>
                                 </BehaviorLayer>
