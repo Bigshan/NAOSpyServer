@@ -1320,7 +1320,6 @@ class MyClass(GeneratedClass):
             sock.close()
 
     def onInput_sendBehaviorNotification(self, p):
-
         runingBehaviors = ""
         for i in p:
             if i.count(".currentChoregrapheBehavior"):
@@ -1478,6 +1477,8 @@ class MyUDPHandler(BaseRequestHandler):
             self.setPosture(dic)
         elif path == "NP--speech-speech":
             self.speechText(dic)
+        elif path == "NP--behavior-single":
+            self.behaviorManage(dic)
         else:
             pass
 
@@ -1736,6 +1737,18 @@ class MyUDPHandler(BaseRequestHandler):
         id = alSpeech.post.say(str(sentence))
         speechIds.append(id)
         alSpeech.wait(id, 0)
+    def behaviorManage(self, dic):
+        command = dic["command"]
+        behavior = dic["behavior"]
+        if(command == "start"):
+            alBehaviorManager.post.runBehavior(behavior)
+        elif(command == "stop"):
+            if (alBehaviorManager.isBehaviorRunning(behavior)):
+                alBehaviorManager.stopBehavior(behavior)
+        elif(command == "add"):
+            alBehaviorManager.addDefaultBehavior(behavior)
+        elif(command == "remove"):
+            alBehaviorManager.removeDefaultBehavior(behavior)
 
 ##################################################
 class UdpServer(ThreadingUDPServer):
