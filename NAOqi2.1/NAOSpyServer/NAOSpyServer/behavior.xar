@@ -208,6 +208,7 @@ alBehaviorManager = ALProxy("ALBehaviorManager")
 alMotion = ALProxy("ALMotion")
 alPosture = ALProxy("ALRobotPosture")
 alTts = ALProxy("ALTextToSpeech")
+alAudio = ALProxy('ALAudioPlayer')
 try:
     alSpeech = ALProxy('ALAnimatedSpeech')
 except Exception as e:
@@ -276,7 +277,6 @@ class MyClass(GeneratedClass):
         self.onUnload()
 
     def sendNotification(self, p):
-        self.logger.info("noti....%d,%s",len(connectedAddress),connectedAddress)
         if len(connectedAddress) == 0:
             return
 
