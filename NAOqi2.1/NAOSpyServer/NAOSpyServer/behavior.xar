@@ -712,7 +712,7 @@ class MyUDPHandler(BaseRequestHandler):
         walkY = int(dic["y"])/10.0
         theta = int(dic["thera"])/10.0
         frequency = int(dic["frequency"])/10.0
-        alMotion.moveToward(walkX,walkY,theta)
+        alMotion.setWalkTargetVelocity(walkX,walkY,theta,frequency)
     def setHead(self, dic):
         walkX = int(dic["x"])/10.0
         walkY = int(dic["y"])/10.0
@@ -769,10 +769,7 @@ class MyUDPHandler(BaseRequestHandler):
         key = dic["key"]
         value = dic["value"]
         if(key == "stiffness"):
-            if value > 0.0:
-                alMotion.wakeUp()
-            else:
-                alMotion.rest()
+            alMotion.post.stiffnessInterpolation("Body",float(value)/1.0, 0.2)
         elif(key == "audioVolume"):
             try:
                 audio = ALProxy("ALAudioDevice")
