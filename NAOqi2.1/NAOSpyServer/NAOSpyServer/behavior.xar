@@ -209,8 +209,12 @@ alMotion = ALProxy("ALMotion")
 alPosture = ALProxy("ALRobotPosture")
 alTts = ALProxy("ALTextToSpeech")
 alAudio = ALProxy('ALAudioPlayer')
+alVideoRecorder = None
+alAudioRecorder = None
 try:
     alSpeech = ALProxy('ALAnimatedSpeech')
+    alVideoRecorder = ALProxy('ALVideoRecorder')
+    alAudioRecorder = ALProxy('ALAudioRecorder')
 except Exception as e:
     alSpeech = ALProxy('ALTextToSpeech')
 
@@ -223,6 +227,7 @@ sockSendHeader = "NAOSpy-shsuammsoxo"
 isRobotics = 0
 imageCount = 0
 bSendImage = False
+bAudioRecording = False
 ncid = ""
 tags = []
 speechIds = []
@@ -247,7 +252,7 @@ class MyClass(GeneratedClass):
         speechIds = []
 
     def onUnload(self):
-        global bSendImage
+        global bSendImage,bAudioRecording
         bSendImage = False
 
         stopUDPServer()
@@ -260,6 +265,13 @@ class MyClass(GeneratedClass):
             except:
                 pass
 
+        if(alVideoRecorder and alVideoRecorder.isRecording()):
+            alVideoRecorder.stopRecording()
+
+        if (alAudioRecorder and bAudioRecording):
+            alAudioRecorder.stopMicrophonesRecording()
+            bAudioRecording = False
+
     def onInput_onStart(self):
         global videoSubscriberID,tags
         self.getParentTimeline().pause()
@@ -269,9 +281,7 @@ class MyClass(GeneratedClass):
         subStr = "shiqishanspy"+str(time.time())
         videoSubscriberID = alVideo.subscribe(subStr, 2, 13, 25)
 
-
         startUDPServer()
-
 
     def onInput_onStop(self):
         self.onUnload()
@@ -379,6 +389,8 @@ class MyUDPHandler(BaseRequestHandler):
             outputDic = self.getSpeechSetDic(dic)
         elif path == "NP--speech-animations":
             outputDic = self.getSpeechAnimationsDic(dic)
+        elif path == "NP--recorder-video":
+            outputDic = self.getVideoRecorderDic(dic)
         else:
             return
 
@@ -449,6 +461,18 @@ class MyUDPHandler(BaseRequestHandler):
             self.behaviorManage(dic)
         elif path == "NP--settings-set":
             self.settingManage(dic)
+        elif path == "NP--motion-larm":
+            self.setLarm(dic)
+        elif path == "NP--motion-rarm":
+            self.setRarm(dic)
+        elif path == "NP--videoRecord-start":
+            self.startVideoRecod(dic)
+        elif path == "NP--videoRecord-stop":
+            self.stopVideoRecod(dic)
+        elif path == "NP--audioRecord-start":
+            self.startAudioRecod(dic)
+        elif path == "NP--audioRecord-stop":
+            self.stopAudioRecod(dic)
         else:
             pass
 
@@ -595,6 +619,15 @@ class MyUDPHandler(BaseRequestHandler):
                 if len(animations) > 60000:
                     break
         return {"animations":animations}
+    def getVideoRecorderDic(self, dic):
+        isRecording = alVideoRecorder.isRecording()
+        cameraID = alVideoRecorder.getCameraID()
+        colorSpace = alVideoRecorder.getColorSpace()
+        frameRate = alVideoRecorder.getFrameRate()
+        resolution = alVideoRecorder.getResolution()
+        videoFormat = alVideoRecorder.getVideoFormat()
+        data = {"isRecording":isRecording,"cameraID":str(cameraID),"colorSpace":str(colorSpace),"frameRate":str(frameRate),"resolution":str(resolution),"videoFormat":str(videoFormat)}
+        return data
     ###POST  #########################################
     def startSendImage(self, host, port):
         global bSendImage
@@ -679,7 +712,7 @@ class MyUDPHandler(BaseRequestHandler):
         walkY = int(dic["y"])/10.0
         theta = int(dic["thera"])/10.0
         frequency = int(dic["frequency"])/10.0
-        alMotion.setWalkTargetVelocity(walkX,walkY,theta,frequency)
+        alMotion.moveToward(walkX,walkY,theta)
     def setHead(self, dic):
         walkX = int(dic["x"])/10.0
         walkY = int(dic["y"])/10.0
@@ -693,6 +726,19 @@ class MyUDPHandler(BaseRequestHandler):
             alMotion.changeAngles("HeadYaw",walkY,0.2)
         if(walkY<=0 and currentYaw[0]>=-2.07):
             alMotion.changeAngles("HeadYaw",walkY,0.2)
+    def setLarm(self, dic):
+        pass
+    def setRarm(self, dic):
+        theta1 = dic["RShoulderPitch"]
+        theta2 = dic["RShoulderRoll"]
+        theta3 = dic["RElbowYaw"]
+        theta4 = dic["RElbowRoll"]
+        alMotion.setAngles("RShoulderPitch",theta1,0.1)
+        alMotion.setAngles("RShoulderRoll",theta2,0.1)
+        alMotion.setAngles("RElbowYaw",theta3,0.1)
+        alMotion.setAngles("RElbowRoll",theta4,0.1)
+
+
     def setPosture(self, dic):
         posture = dic["posture"]
         alPosture.setMaxTryNumber(2)
@@ -723,7 +769,10 @@ class MyUDPHandler(BaseRequestHandler):
         key = dic["key"]
         value = dic["value"]
         if(key == "stiffness"):
-            alMotion.post.stiffnessInterpolation("Body",float(value)/1.0, 0.2)
+            if value > 0.0:
+                alMotion.wakeUp()
+            else:
+                alMotion.rest()
         elif(key == "audioVolume"):
             try:
                 audio = ALProxy("ALAudioDevice")
@@ -755,7 +804,20 @@ class MyUDPHandler(BaseRequestHandler):
                     system.shutdown()
             except:
                 pass
+    def startVideoRecod(self, dic):
+        if not alVideoRecorder.isRecording():
+            name = dic["name"]
+            alVideoRecorder.startRecording("/home/nao/recordings/cameras/",name,True)
 
+    def stopVideoRecod(self, dic):
+        alVideoRecorder.stopRecording()
+
+    def startAudioRecod(self, dic):
+        name = "/home/nao/recordings/microphones/" + dic["name"]
+        alAudioRecorder.startMicrophonesRecording(name,dic["format"],int(dic["rate"]),(0,0,1,0))
+
+    def stopAudioRecod(self, dic):
+        alAudioRecorder.stopMicrophonesRecording()
 ##################################################
 class UdpServer(ThreadingUDPServer):
     allow_reuse_address = True
