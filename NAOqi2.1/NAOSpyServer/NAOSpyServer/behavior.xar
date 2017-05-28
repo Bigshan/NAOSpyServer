@@ -803,6 +803,20 @@ class MyUDPHandler(BaseRequestHandler):
                 pass
     def startVideoRecod(self, dic):
         if not alVideoRecorder.isRecording():
+            resolution = dic["resolution"]
+            camera = dic["camera"]
+            rate = dic["rate"]
+            format = dic["format"]
+            space = dic["space"]
+            alVideoRecorder.setResolution(int(resolution))
+            alVideoRecorder.setCameraID(int(camera))
+            alVideoRecorder.setFrameRate(int(rate))
+            alVideoRecorder.setVideoFormat(format)
+            colorSapce = 13
+            if space == "Yuv":
+                colorSapce = 0
+            alVideoRecorder.setColorSpace(colorSapce)
+
             name = dic["name"]
             alVideoRecorder.startRecording("/home/nao/recordings/cameras/",name,True)
 
@@ -810,8 +824,16 @@ class MyUDPHandler(BaseRequestHandler):
         alVideoRecorder.stopRecording()
 
     def startAudioRecod(self, dic):
-        name = "/home/nao/recordings/microphones/" + dic["name"]
-        alAudioRecorder.startMicrophonesRecording(name,dic["format"],int(dic["rate"]),(0,0,1,0))
+        path = "/home/nao/recordings/microphones/"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        name = path + dic["name"]
+        front = int(dic["front"])
+        rear = int(dic["rear"])
+        left = int(dic["left"])
+        right = int(dic["right"])
+        channel = (left,right,front,rear)
+        alAudioRecorder.startMicrophonesRecording(name,dic["format"],int(dic["rate"]),channel)
 
     def stopAudioRecod(self, dic):
         alAudioRecorder.stopMicrophonesRecording()
