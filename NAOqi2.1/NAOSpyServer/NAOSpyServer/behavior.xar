@@ -382,6 +382,10 @@ class MyUDPHandler(BaseRequestHandler):
             outputDic = self.getSpeechAnimationsDic(dic)
         elif path == "NP--recorder-video":
             outputDic = self.getVideoRecorderDic(dic)
+        elif path == "NP--audio-loaded":
+            outputDic = self.getLoadedAudioDic(dic)
+        elif path == "NP--audio-detail":
+            outputDic = self.getAudioDetailDic(dic)
         else:
             return
 
@@ -479,15 +483,17 @@ class MyUDPHandler(BaseRequestHandler):
         name = "Simulator"
         version = ""
         serverVersion = 20
+        bodyId = ""
         if(isRobotics == 1):
             try:
                 system = ALProxy("ALSystem")
                 name = system.robotName()
                 version = system.systemVersion()
+                bodyId = alMemory.getData("Device/DeviceList/ChestBoard/BodyId")
             except :
                 pass
         tcpPort = alMemory.getData("NAOSPY_TCPPORT")
-        data = {"name":name,"version":version,"serverVersion":serverVersion,"isRobot":isRobotics,"tcpPort":tcpPort}
+        data = {"name":name,"version":version,"serverVersion":serverVersion,"isRobot":isRobotics,"tcpPort":tcpPort,"bodyId":bodyId}
         return data
 
     def getBehaviorsDic(self):
@@ -612,6 +618,24 @@ class MyUDPHandler(BaseRequestHandler):
         resolution = alVideoRecorder.getResolution()
         videoFormat = alVideoRecorder.getVideoFormat()
         data = {"isRecording":isRecording,"cameraID":str(cameraID),"colorSpace":str(colorSpace),"frameRate":str(frameRate),"resolution":str(resolution),"videoFormat":str(videoFormat)}
+        return data
+
+    def getLoadedAudioDic(self, dic):
+        ids = alAudioPlayer.getLoadedFilesIds()
+        names = alAudioPlayer.getLoadedFilesNames()
+        data = {"ids":ids,"names":names}
+        return data
+    def getAudioDetailDic(self, dic):
+        taskId = int(dic["taskId"])
+        volume = alAudioPlayer.getVolume(taskId)
+        length = alAudioPlayer.getFileLength(taskId)
+        position1 = alAudioPlayer.getCurrentPosition(taskId)
+        time.sleep(1.0)
+        position2 = alAudioPlayer.getCurrentPosition(taskId)
+        playing = "0"
+        if position2 > position1:
+            playing = "1"
+        data = {"taskId":str(taskId),"volume":str(volume),"length":str(length),"position":str(position2),"playing":playing}
         return data
     ###POST  #########################################
     def startSendImage(self, host, port):
@@ -828,10 +852,30 @@ class MyUDPHandler(BaseRequestHandler):
         packageManager.install(name)
 
     def soundOpreate(self, dic):
-        name = dic["name"]
         key = dic["key"]
-        if key == "play":
-            alAudioPlayer.playFile(name)
+        if key == "stateControl":
+            taskId = int(dic["taskId"])
+            value = dic["value"]
+            if value == "play":
+                alAudioPlayer.post.play(taskId)
+            elif value == "playLoop":
+                alAudioPlayer.post.playInLoop(taskId)
+            elif value == "pause":
+                alAudioPlayer.pause(taskId)
+        elif key == "volume":
+            taskId = int(dic["taskId"])
+            value = float(dic["value"])
+            alAudioPlayer.setVolume(taskId,value)
+        elif key == "goto":
+            taskId = int(dic["taskId"])
+            value = float(dic["value"])
+            alAudioPlayer.goTo(taskId,value)
+        elif key == "load":
+            name = dic["name"]
+            if 0 == alAudioPlayer.getLoadedFilesNames().count(name):
+                alAudioPlayer.loadFile(name)
+        elif key == "stopall":
+            alAudioPlayer.stopAll()
 ##################################################
 class UdpServer(ThreadingUDPServer):
     allow_reuse_address = True
