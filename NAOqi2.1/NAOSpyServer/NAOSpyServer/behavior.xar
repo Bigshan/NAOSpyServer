@@ -455,10 +455,8 @@ class MyUDPHandler(BaseRequestHandler):
             self.behaviorManage(dic)
         elif path == "NP--settings-set":
             self.settingManage(dic)
-        elif path == "NP--videoRecord-start":
-            self.startVideoRecod(dic)
-        elif path == "NP--videoRecord-stop":
-            self.stopVideoRecod(dic)
+        elif path == "NP--videoRecord-set":
+            self.setVideoRecod(dic)
         elif path == "NP--audioRecord-start":
             self.startAudioRecod(dic)
         elif path == "NP--audioRecord-stop":
@@ -854,27 +852,32 @@ class MyUDPHandler(BaseRequestHandler):
                     system.shutdown()
             except:
                 pass
-    def startVideoRecod(self, dic):
-        if not alVideoRecorder.isRecording():
+    def setVideoRecod(self, dic):
+        action = dic["action"]
+        if action == "stop":
+            alVideoRecorder.stopRecording()
+        elif action == "start":
+            name = dic["name"]
+            if not alVideoRecorder.isRecording():
+                alVideoRecorder.startRecording("/home/nao/recordings/cameras/",name,True)
+        elif action == "resolution":
             resolution = dic["resolution"]
-            camera = dic["camera"]
-            rate = dic["rate"]
-            format = dic["format"]
-            space = dic["space"]
             alVideoRecorder.setResolution(int(resolution))
+        elif action == "camera":
+            camera = dic["camera"]
             alVideoRecorder.setCameraID(int(camera))
+        elif action == "rate":
+            rate = dic["rate"]
             alVideoRecorder.setFrameRate(int(rate))
+        elif action == "format":
+            format = dic["format"]
             alVideoRecorder.setVideoFormat(format)
+        elif action == "space":
+            space = dic["space"]
             colorSapce = 13
             if space == "Yuv":
                 colorSapce = 0
             alVideoRecorder.setColorSpace(colorSapce)
-
-            name = dic["name"]
-            alVideoRecorder.startRecording("/home/nao/recordings/cameras/",name,True)
-
-    def stopVideoRecod(self, dic):
-        alVideoRecorder.stopRecording()
 
     def startAudioRecod(self, dic):
         path = "/home/nao/recordings/microphones/"
