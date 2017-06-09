@@ -409,7 +409,8 @@ class MyUDPHandler(BaseRequestHandler):
             if tags.count(tagStr) >=1:
                 self.sendResponseData(sock,baseDic)
                 return
-        tags.append(tagStr)
+            else:
+                tags.append(tagStr)
 
         outputDic = {}
         if path == "NP--robots-connect":
@@ -444,10 +445,8 @@ class MyUDPHandler(BaseRequestHandler):
             self.changeCameraIndex(dic)
         elif path == "NP--image--changeResolution":
             self.changeCameraResolution(dic)
-        elif path == "NP--motion-walk":
-            self.setWalk(dic)
-        elif path == "NP--motion-head":
-            self.setHead(dic)
+        elif path == "NP--motion-set":
+            self.setMotion(dic)
         elif path == "NP--motion-posture":
             self.setPosture(dic)
         elif path == "NP--speech-speech":
@@ -456,10 +455,6 @@ class MyUDPHandler(BaseRequestHandler):
             self.behaviorManage(dic)
         elif path == "NP--settings-set":
             self.settingManage(dic)
-        elif path == "NP--motion-larm":
-            self.setLarm(dic)
-        elif path == "NP--motion-rarm":
-            self.setRarm(dic)
         elif path == "NP--videoRecord-start":
             self.startVideoRecod(dic)
         elif path == "NP--videoRecord-stop":
@@ -475,8 +470,9 @@ class MyUDPHandler(BaseRequestHandler):
         else:
             pass
 
-        baseDic.update(outputDic)
-        self.sendResponseData(sock,baseDic)
+        if int(tag) >= 10000000:
+            baseDic.update(outputDic)
+            self.sendResponseData(sock,baseDic)
 
     ###GET ##############################
     def getOnlineDic(self, dic):
@@ -735,18 +731,66 @@ class MyUDPHandler(BaseRequestHandler):
             alMotion.changeAngles("HeadYaw",walkY,0.2)
         if(walkY<=0 and currentYaw[0]>=-2.07):
             alMotion.changeAngles("HeadYaw",walkY,0.2)
-    def setLarm(self, dic):
-        pass
-    def setRarm(self, dic):
-        theta1 = dic["RShoulderPitch"]
-        theta2 = dic["RShoulderRoll"]
-        theta3 = dic["RElbowYaw"]
-        theta4 = dic["RElbowRoll"]
-        alMotion.setAngles("RShoulderPitch",theta1,0.1)
-        alMotion.setAngles("RShoulderRoll",theta2,0.1)
-        alMotion.setAngles("RElbowYaw",theta3,0.1)
-        alMotion.setAngles("RElbowRoll",theta4,0.1)
-
+    def setMotion(self, dic):
+        key = dic["action"]
+        if key == "Move":
+            x = int(dic["x"])/10.0
+            y = int(dic["y"])/10.0
+            frequency = int(dic["frequency"])/10.0
+            alMotion.setWalkTargetVelocity(x,y,0.0,frequency)
+        elif key == "Turn":
+            thera = int(dic["thera"])/10.0
+            frequency = int(dic["frequency"])/10.0
+            alMotion.setWalkTargetVelocity(0.0,0.0,thera,frequency)
+        elif key == "Head":
+            x = -int(dic["x"])/10.0
+            y = int(dic["y"])/10.0
+            alMotion.changeAngles("HeadPitch",x,0.2)
+            alMotion.changeAngles("HeadYaw",y,0.2)
+        elif key == "LShoulder":
+            x = -int(dic["x"])/10.0
+            y = int(dic["y"])/10.0
+            alMotion.changeAngles("LShoulderPitch",x,0.2)
+            alMotion.changeAngles("LShoulderRoll",y,0.2)
+        elif key == "LElbow":
+            x = int(dic["x"])/10.0
+            y = int(dic["y"])/10.0
+            alMotion.changeAngles("LElbowYaw",x,0.2)
+            alMotion.changeAngles("LElbowRoll",y,0.2)
+        elif key == "LWrist":
+            x = -int(dic["x"])/10.0
+            y = -int(dic["y"])/10.0
+            if abs(x) >= abs(y):
+                alMotion.changeAngles("LWristYaw",x,0.2)
+            else:
+                alMotion.changeAngles("LWristYaw",y,0.2)
+        elif key == "RShoulder":
+            x = -int(dic["x"])/10.0
+            y = int(dic["y"])/10.0
+            alMotion.changeAngles("RShoulderPitch",x,0.2)
+            alMotion.changeAngles("RShoulderRoll",y,0.2)
+        elif key == "RElbow":
+            x = -int(dic["x"])/10.0
+            y = int(dic["y"])/10.0
+            alMotion.changeAngles("RElbowYaw",x,0.2)
+            alMotion.changeAngles("RElbowRoll",y,0.2)
+        elif key == "RWrist":
+            x = -int(dic["x"])/10.0
+            y = -int(dic["y"])/10.0
+            if abs(x) >= abs(y):
+                alMotion.changeAngles("RWristYaw",x,0.2)
+            else:
+                alMotion.changeAngles("RWristYaw",y,0.2)
+        elif key == "handSet":
+            hand = dic["hand"]
+            if hand == "lhand_close":
+                alMotion.post.closeHand("LHand")
+            elif hand == "lhand_open":
+                alMotion.post.openHand("LHand")
+            elif hand == "rhand_close":
+                alMotion.post.closeHand("RHand")
+            elif hand == "rhand_open":
+                alMotion.post.openHand("RHand")
 
     def setPosture(self, dic):
         posture = dic["posture"]
