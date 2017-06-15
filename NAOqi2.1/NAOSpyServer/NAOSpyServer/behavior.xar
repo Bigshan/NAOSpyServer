@@ -923,6 +923,11 @@ class MyUDPHandler(BaseRequestHandler):
                 alAudioPlayer.loadFile(name)
         elif key == "stopall":
             alAudioPlayer.stopAll()
+        elif key == "ftp_play":
+            name = dic["name"]
+            if 0 == alAudioPlayer.getLoadedFilesNames().count(name):
+                taskId = alAudioPlayer.loadFile(name)
+                alAudioPlayer.post.play(taskId)
 ##################################################
 class UdpServer(ThreadingUDPServer):
     allow_reuse_address = True
