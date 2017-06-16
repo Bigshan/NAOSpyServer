@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<package version="2.0.0" uuid="naospyserver">
+<package version="2.1.0" uuid="naospyserver">
  <names>
   <name lang="en_US">NAOSpyServer</name>
  </names>

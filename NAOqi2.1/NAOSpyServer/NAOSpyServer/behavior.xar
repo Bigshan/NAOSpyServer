@@ -478,7 +478,7 @@ class MyUDPHandler(BaseRequestHandler):
     def getOnlineDic(self, dic):
         name = "Simulator"
         version = ""
-        serverVersion = 20
+        serverVersion = 21
         bodyId = ""
         if(isRobotics == 1):
             try:
