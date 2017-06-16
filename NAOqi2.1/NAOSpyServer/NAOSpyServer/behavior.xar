@@ -15,7 +15,7 @@
             <BehaviorLayer name="behavior_layer1">
                 <BehaviorKeyframe name="keyframe1" index="1">
                     <Diagram>
-                        <Box name="NAOSpyServer" id="3" localization="8" tooltip="version 2.0.0" x="444" y="164">
+                        <Box name="NAOSpyServer" id="3" localization="8" tooltip="version 2.0.0" x="276" y="127">
                             <bitmap>media/images/box/box-diagram.png</bitmap>
                             <script language="4">
                                 <content>
@@ -227,6 +227,7 @@ sockRecvHeader = "NAOSpy-hsukanbgdo"
 sockSendHeader = "NAOSpy-shsuammsoxo"
 isRobotics = 0
 imageCount = 0
+bNewVersion = True
 bSendImage = False
 bAudioRecording = False
 ncid = ""
@@ -234,6 +235,7 @@ tags = []
 speechIds = []
 
 notiSeparatorStr = "$*$"
+
 
 class MyClass(GeneratedClass):
     def __init__(self):
@@ -735,11 +737,18 @@ class MyUDPHandler(BaseRequestHandler):
             x = int(dic["x"])/10.0
             y = int(dic["y"])/10.0
             frequency = int(dic["frequency"])/10.0
-            alMotion.setWalkTargetVelocity(x,y,0.0,frequency)
+            if bNewVersion:
+                alMotion.moveToward(x,y,0.0)
+            else:
+                alMotion.setWalkTargetVelocity(x,y,0.0,frequency)
+
         elif key == "Turn":
             thera = int(dic["thera"])/10.0
             frequency = int(dic["frequency"])/10.0
-            alMotion.setWalkTargetVelocity(0.0,0.0,thera,frequency)
+            if bNewVersion:
+                alMotion.moveToward(0.0,0.0,thera)
+            else:
+                alMotion.setWalkTargetVelocity(0.0,0.0,thera,frequency)
         elif key == "Head":
             x = -int(dic["x"])/10.0
             y = int(dic["y"])/10.0
@@ -928,6 +937,10 @@ class MyUDPHandler(BaseRequestHandler):
             if 0 == alAudioPlayer.getLoadedFilesNames().count(name):
                 taskId = alAudioPlayer.loadFile(name)
                 alAudioPlayer.post.play(taskId)
+            else:
+                index = alAudioPlayer.getLoadedFilesNames().index(name)
+                taskId = alAudioPlayer.getLoadedFilesIds()[index]
+                alAudioPlayer.post.play(int(taskId))
 ##################################################
 class UdpServer(ThreadingUDPServer):
     allow_reuse_address = True
