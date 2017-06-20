@@ -830,7 +830,15 @@ class MyUDPHandler(BaseRequestHandler):
     def settingManage(self, dic):
         key = dic["key"]
         value = dic["value"]
-        if(key == "stiffness"):
+        if(key == "stiffness_set"):
+            if bNewVersion:
+                if float(value) > 0:
+                    alMotion.wakeUp()
+                else:
+                    alMotion.rest()
+            else:
+                alMotion.post.stiffnessInterpolation("Body",float(value)/1.0, 0.2)
+        elif(key == "stiffness_motion"):
             alMotion.post.stiffnessInterpolation("Body",float(value)/1.0, 0.2)
         elif(key == "audioVolume"):
             try:
