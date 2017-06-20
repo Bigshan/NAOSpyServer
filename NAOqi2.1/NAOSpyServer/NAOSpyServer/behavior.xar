@@ -233,6 +233,8 @@ bAudioRecording = False
 ncid = ""
 tags = []
 speechIds = []
+voiceSpeed = "100"
+voiceShaping = "100"
 
 notiSeparatorStr = "$*$"
 
@@ -594,7 +596,7 @@ class MyUDPHandler(BaseRequestHandler):
         for i in languageList:
             supportLanguage += i
             supportLanguage += "$"
-        data = {"currentLanguage":currentLanguage,"supportLanguage":supportLanguage,"volume":volume,"mode":bodyMode}
+        data = {"currentLanguage":currentLanguage,"supportLanguage":supportLanguage,"volume":volume,"mode":bodyMode,"voiceSpeed":voiceSpeed,"voiceShaping":voiceShaping}
         return data
     def getSpeechAnimationsDic(self, dic):
         behaviorList = alBehaviorManager.getInstalledBehaviors()
@@ -806,8 +808,8 @@ class MyUDPHandler(BaseRequestHandler):
     def speechText(self, dic):
         global speechIds
         message = dic["message"]
-        sentence = "\RSPD="+ str( 100 ) + "\ "
-        sentence += "\VCT="+ str( 100 ) + "\ "
+        sentence = "\RSPD="+ voiceSpeed + "\ "
+        sentence += "\VCT="+ voiceShaping + "\ "
         sentence += str(message)
         sentence +=  "\RST\ "
         id = alSpeech.post.say(str(sentence))
@@ -837,7 +839,13 @@ class MyUDPHandler(BaseRequestHandler):
             except:
                 pass
         elif(key == "speechVolume"):
-             alTts.setVolume(int(value)/100.0)
+            alTts.setVolume(int(value)/100.0)
+        elif(key == "voiceSpeed"):
+            global voiceSpeed
+            voiceSpeed = value
+        elif(key == "voiceShaping"):
+            global voiceShaping
+            voiceShaping = value
         elif(key == "speechAnimated"):
             try:
                 animSpeech = ALProxy('ALAnimatedSpeech')
